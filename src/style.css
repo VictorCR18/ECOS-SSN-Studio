@@ -1,0 +1,82 @@
+/* src/style.css — tipografia e utilitários visuais globais.
+   Paleta e cores semânticas vivem em plugins/vuetify.ts e
+   services/graph/shapes.ts; aqui só tratamos fontes e pequenos utilitários. */
+
+:root {
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+.fonte-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.fonte-mono {
+  font-family: var(--font-mono);
+}
+
+/* Fundo de "papel de blueprint": grade sutil, usada atrás do canvas do diagrama. */
+.fundo-blueprint {
+  background-color: #fbfcfb;
+  background-image:
+    linear-gradient(rgba(27, 77, 107, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(27, 77, 107, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.v-theme--ecosDark .fundo-blueprint {
+  background-color: #0c161c;
+  background-image:
+    linear-gradient(rgba(124, 182, 224, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 182, 224, 0.08) 1px, transparent 1px);
+}
+
+/* Contêiner do maxGraph precisa de posicionamento relativo e altura definida. */
+.container-diagrama {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.container-diagrama svg {
+  display: block;
+}
+
+.mxRubberband {
+  position: absolute;
+  border: 1px solid rgb(27 77 107 / 70%);
+  background-color: rgb(91 155 199 / 18%);
+  pointer-events: none;
+}
+
+.diagrama-tela-cheia {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+/* Scrollbar discreta para painéis internos (histórico, legenda, etc.). */
+.scroll-discreta {
+  scrollbar-width: thin;
+}
+.scroll-discreta::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-discreta::-webkit-scrollbar-thumb {
+  background-color: rgba(27, 77, 107, 0.25);
+  border-radius: 8px;
+}

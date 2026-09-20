@@ -1,0 +1,43 @@
+{
+  "name": "ecos-ssn-modeling",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Modelagem de Ecossistemas de Software (ECOS) com geração automática de modelos SSN via LLM — evolução do ECOS Modeling.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n VITE,API -c blue,green \"npm:dev:client\" \"npm:dev:server\"",
+    "dev:client": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "vue-tsc -b --noEmit && tsc --noEmit -p tsconfig.server.json && vite build",
+    "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
+    "build:skip-check": "vite build",
+    "start": "tsx server/index.ts",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/genai": "^2.23.0",
+    "@maxgraph/core": "^0.24.0",
+    "@mdi/font": "^7.4.47",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.1",
+    "express": "^5.2.1",
+    "groq-sdk": "^1.6.0",
+    "openai": "^7.19.0",
+    "pinia": "^2.3.1",
+    "vue": "^3.5.13",
+    "vuetify": "^3.13.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.10.2",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.7",
+    "vite-plugin-vuetify": "^2.1.3",
+    "vue-tsc": "^2.1.10"
+  }
+}
+

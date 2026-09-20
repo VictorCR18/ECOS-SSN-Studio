@@ -1,0 +1,21 @@
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  /**
+   * Opcional: base URL do backend, usada apenas se o frontend for hospedado
+   * separadamente da API (ex.: frontend na Vercel, backend em outro host).
+   * Em desenvolvimento (proxy do Vite) e quando o backend serve o próprio
+   * build de produção, deixe em branco.
+   */
+  readonly VITE_API_BASE_URL?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+declare module "*.vue" {
+  import type { DefineComponent } from "vue";
+  const component: DefineComponent<Record<string, unknown>, Record<string, unknown>, unknown>;
+  export default component;
+}
