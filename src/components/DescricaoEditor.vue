@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useEcosStore } from "@/stores/ecosStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { ESTRATEGIAS_PROMPT, ESFORCOS } from "@/types/ssn";
-import { MODELOS_LLM, definicaoDoModelo } from "@/types/llm";
+import { MODELOS_LLM, MODELO_PERSONALIZADO_ID, definicaoDoModelo } from "@/types/llm";
 import { modeloRecomendado, JUSTIFICATIVA_POR_ESTRATEGIA } from "@/services/modelSelector";
 import { sugerirEsforcoInicial } from "@/services/effortService";
 
@@ -43,6 +43,15 @@ function aoAlterarDescricao(valor: string | null) {
 }
 
 const rotuloModeloAtual = computed(() => definicaoDoModelo(modeloAtual.value)?.rotulo ?? modeloAtual.value);
+
+const modelosDisponiveis = computed(() => [
+  ...MODELOS_LLM,
+  {
+    id: MODELO_PERSONALIZADO_ID,
+    provedor: "custom" as const,
+    rotulo: settings.configuracaoPersonalizada.nome.trim() || "LLM personalizada",
+  },
+]);
 
 const podeGerar = computed(
   () => ecos.descricaoAtual.trim().length > 10 && !ecos.gerando,
@@ -138,7 +147,7 @@ async function aoClicarGerar() {
         </div>
         <v-select
           v-model="modeloAtual"
-          :items="MODELOS_LLM"
+          :items="modelosDisponiveis"
           item-title="rotulo"
           item-value="id"
           :disabled="settings.modoModeloAutomatico"

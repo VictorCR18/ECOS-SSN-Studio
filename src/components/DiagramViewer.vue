@@ -41,6 +41,7 @@ onMounted(() => {
   }
   graph.setPanning(true);
   graph.setConnectable(true);
+  graph.setDisconnectOnMove(false);
   graph.setCellsBendable(true);
   graph.setEdgeLabelsMovable(true);
   graph.setCellsEditable(true); // permite renomear um ator com duplo clique

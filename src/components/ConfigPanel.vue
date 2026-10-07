@@ -4,7 +4,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 
 const settings = useSettingsStore();
 
-const mostrarChave = ref({ gemini: false, nvidia: false, groq: false });
+const mostrarChave = ref({ gemini: false, nvidia: false, groq: false, custom: false });
 
 function alternarVisibilidade(provedor: keyof typeof mostrarChave.value) {
   mostrarChave.value[provedor] = !mostrarChave.value[provedor];
@@ -52,6 +52,9 @@ function textoDoStatus(configurado: boolean | undefined) {
         <v-chip size="small" :color="corDoStatus(settings.statusServidor?.groq)" variant="tonal">
           Groq: {{ textoDoStatus(settings.statusServidor?.groq) }}
         </v-chip>
+        <v-chip size="small" :color="corDoStatus(settings.statusServidor?.custom)" variant="tonal">
+          Personalizada: {{ textoDoStatus(settings.statusServidor?.custom) }}
+        </v-chip>
         <v-btn
           icon="mdi-refresh"
           size="x-small"
@@ -93,6 +96,51 @@ function textoDoStatus(configurado: boolean | undefined) {
         @click:append-inner="alternarVisibilidade('groq')"
         @update:model-value="settings.definirChave('groq', $event ?? '')"
       />
+
+      <v-divider />
+
+      <div>
+        <div class="text-subtitle-2 mb-1">Outra LLM (API compatível com OpenAI)</div>
+        <p class="text-caption text-medium-emphasis mb-3">
+          Use para OpenRouter, OpenAI, DeepSeek, Together, Ollama ou outro serviço que ofereça Chat Completions.
+        </p>
+        <v-text-field
+          :model-value="settings.configuracaoPersonalizada.nome"
+          label="Nome exibido no seletor"
+          prepend-inner-icon="mdi-robot-outline"
+          hide-details
+          class="mb-3"
+          @update:model-value="settings.definirConfiguracaoPersonalizada('nome', $event ?? '')"
+        />
+        <v-text-field
+          :model-value="settings.configuracaoPersonalizada.endpoint"
+          label="URL base da API"
+          placeholder="https://api.openai.com/v1"
+          prepend-inner-icon="mdi-link-variant"
+          hide-details
+          class="mb-3"
+          @update:model-value="settings.definirConfiguracaoPersonalizada('endpoint', $event ?? '')"
+        />
+        <v-text-field
+          :model-value="settings.configuracaoPersonalizada.modelo"
+          label="ID do modelo"
+          placeholder="ex.: gpt-4o-mini ou deepseek-chat"
+          prepend-inner-icon="mdi-cube-outline"
+          hide-details
+          class="mb-3"
+          @update:model-value="settings.definirConfiguracaoPersonalizada('modelo', $event ?? '')"
+        />
+        <v-text-field
+          :model-value="settings.chaves.custom"
+          label="Chave de API da LLM personalizada"
+          :type="mostrarChave.custom ? 'text' : 'password'"
+          :append-inner-icon="mostrarChave.custom ? 'mdi-eye-off' : 'mdi-eye'"
+          prepend-inner-icon="mdi-key-variant"
+          hide-details
+          @click:append-inner="alternarVisibilidade('custom')"
+          @update:model-value="settings.definirChave('custom', $event ?? '')"
+        />
+      </div>
 
       <div>
         <span class="text-subtitle-2">Temperatura: {{ settings.temperatura.toFixed(2) }}</span>

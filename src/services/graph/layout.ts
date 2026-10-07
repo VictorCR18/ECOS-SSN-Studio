@@ -14,6 +14,10 @@ export function aplicarLayoutHierarquico(graph: AbstractGraph): void {
   layout.intraCellSpacing = 50;
   layout.interRankCellSpacing = 110;
   layout.interHierarchySpacing = 60;
+  // Gateways são vértices de primeiro nível e participam das arestas do fluxo.
+  // Mantemos a travessia de ancestrais desligada para que o layout não tente
+  // reposicionar células internas caso algum ator contenha filhos no futuro.
+  layout.traverseAncestors = false;
   layout.execute(graph.getDefaultParent());
 }
 

@@ -207,6 +207,20 @@ function validarSemantica(modelo: ModeloSSN): ErroValidacao[] {
     }
   }
 
+  // Gateways precisam representar uma bifurcação ou convergência real no grafo.
+  for (const gateway of modelo.gateways.filter((item) => item.eh_logico === true)) {
+    const quantidade = gateway.direcao === "split"
+      ? modelo.relacoes.filter((r) => r.origem === gateway.ator).length
+      : modelo.relacoes.filter((r) => r.destino === gateway.ator).length;
+    if (quantidade < 2) {
+      avisos.push({
+        campo: `gateways["${gateway.ator}"]`,
+        mensagem: `O gateway ${gateway.logica} (${gateway.direcao}) de "${gateway.ator}" precisa estar ligado a pelo menos duas relações na direção indicada; foram encontradas ${quantidade}.`,
+        gravidade: "aviso",
+      });
+    }
+  }
+
   // Atores desconectados (nem origem nem destino de nenhuma relação).
   for (const ator of modelo.atores) {
     const participaDeAlgumaRelacao = modelo.relacoes.some(

@@ -72,6 +72,7 @@ export const useEcosStore = defineStore("ecos", {
             esforco: settings.esforcoSelecionado,
             modeloId: settings.modeloSelecionado,
             temperatura: settings.temperatura,
+            configuracaoPersonalizada: settings.configuracaoPersonalizada,
           },
           settings.chaves,
         );
@@ -99,7 +100,9 @@ export const useEcosStore = defineStore("ecos", {
         this.metadadosAtuais = {
           estrategia: settings.estrategiaSelecionada,
           esforco: settings.esforcoSelecionado,
-          provedor: settings.modeloSelecionado.includes("gemini")
+          provedor: settings.modeloSelecionado === "custom"
+            ? "custom"
+            : settings.modeloSelecionado.includes("gemini")
             ? "gemini"
             : settings.modeloSelecionado.includes("nvidia") ||
                 settings.modeloSelecionado.startsWith("nvidia/") ||

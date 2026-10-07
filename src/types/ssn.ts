@@ -24,7 +24,14 @@ export const TIPOS_ATOR: TipoAtor[] = [
 /** Tipos de fluxo (artefato transacionado entre dois atores). */
 export type TipoFluxo = "P" | "Ser" | "Req" | "Des" | "Comp" | "Sys";
 
-export const TIPOS_FLUXO: TipoFluxo[] = ["P", "Ser", "Req", "Des", "Comp", "Sys"];
+export const TIPOS_FLUXO: TipoFluxo[] = [
+  "P",
+  "Ser",
+  "Req",
+  "Des",
+  "Comp",
+  "Sys",
+];
 
 export const DESCRICAO_TIPO_FLUXO: Record<TipoFluxo, string> = {
   P: "Produto — tecnologia/componente fornecido ao CoI",
@@ -50,10 +57,15 @@ export interface Relacao {
 }
 
 export interface Gateway {
+  id?: string;
   ator: string;
+  eh_logico?: boolean;
   direcao: DirecaoGateway;
   logica: LogicaGateway;
+  /** Tipo de fluxo ao qual o gateway se aplica; ausente em modelos legados. */
+  tipo_fluxo?: TipoFluxo;
   descricao: string;
+  membros: string[];
 }
 
 /** Estrutura de saída esperada da LLM (e do modelo salvo/carregado). */
@@ -97,22 +109,26 @@ export const ESTRATEGIAS_PROMPT: {
   {
     valor: "G1",
     titulo: "G1 — Baseline",
-    descricao: "Instrução direta, sem qualquer contextualização sobre ECOS ou SSN (Zero-Shot).",
+    descricao:
+      "Instrução direta, sem qualquer contextualização sobre ECOS ou SSN (Zero-Shot).",
   },
   {
     valor: "G2",
     titulo: "G2 — Contexto Estruturado Básico",
-    descricao: "Definições formais de atores, fluxos e regras semânticas da notação SSN.",
+    descricao:
+      "Definições formais de atores, fluxos e regras semânticas da notação SSN.",
   },
   {
     valor: "G3",
     titulo: "G3 — Persona + Few-Shot",
-    descricao: "Persona de especialista, estrutura de saída e exemplos completos de modelos SSN.",
+    descricao:
+      "Persona de especialista, estrutura de saída e exemplos completos de modelos SSN.",
   },
   {
     valor: "G4",
     titulo: "G4 — Cadeia de Raciocínio",
-    descricao: "Persona + exemplos + protocolo Chain-of-Thought explícito antes da saída final.",
+    descricao:
+      "Persona + exemplos + protocolo Chain-of-Thought explícito antes da saída final.",
   },
 ];
 
@@ -124,7 +140,7 @@ export const ESFORCOS: { valor: EsforcoGeracao; titulo: string }[] = [
   { valor: "alto", titulo: "Alto" },
 ];
 
-export type ProvedorLLM = "gemini" | "nvidia" | "groq";
+export type ProvedorLLM = "gemini" | "nvidia" | "groq" | "custom";
 
 export interface ErroValidacao {
   campo: string;

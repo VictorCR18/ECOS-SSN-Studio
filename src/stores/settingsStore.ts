@@ -7,13 +7,14 @@
 // quais provedores já têm chave configurada no backend (GET /api/status).
 
 import { defineStore } from "pinia";
-import type { ChavesApi } from "@/types/llm";
+import type { ChavesApi, ConfiguracaoLLMPersonalizada } from "@/types/llm";
 import type { EsforcoGeracao, EstrategiaPrompt } from "@/types/ssn";
 import { armazenamentoConfig } from "@/utils/storage";
 import { modeloRecomendado } from "@/services/modelSelector";
 
 interface ConfigPersistida {
   chaves: ChavesApi;
+  configuracaoPersonalizada: ConfiguracaoLLMPersonalizada;
   temperatura: number;
   modoEsforcoAutomatico: boolean;
   modoModeloAutomatico: boolean;
@@ -23,6 +24,7 @@ export interface StatusServidor {
   gemini: boolean;
   nvidia: boolean;
   groq: boolean;
+  custom?: boolean;
 }
 
 // As chaves aqui são um OVERRIDE OPCIONAL por usuário/navegador: se
@@ -31,7 +33,12 @@ export interface StatusServidor {
 // GROQ_API_KEY no .env do servidor — ver server/index.ts). Deixe em branco
 // para usar sempre as chaves configuradas no servidor.
 const CONFIG_PADRAO: ConfigPersistida = {
-  chaves: { gemini: "", nvidia: "", groq: "" },
+  chaves: { gemini: "", nvidia: "", groq: "", custom: "" },
+  configuracaoPersonalizada: {
+    nome: "LLM personalizada",
+    endpoint: "",
+    modelo: "",
+  },
   temperatura: 0.3,
   modoEsforcoAutomatico: true,
   modoModeloAutomatico: true,
@@ -51,6 +58,11 @@ export const useSettingsStore = defineStore("settings", {
     return {
       ...CONFIG_PADRAO,
       ...persistido,
+      chaves: { ...CONFIG_PADRAO.chaves, ...persistido.chaves },
+      configuracaoPersonalizada: {
+        ...CONFIG_PADRAO.configuracaoPersonalizada,
+        ...persistido.configuracaoPersonalizada,
+      },
       estrategiaSelecionada: "G3",
       esforcoSelecionado: "medio",
       modeloSelecionado: modeloRecomendado("G3"),
@@ -61,17 +73,28 @@ export const useSettingsStore = defineStore("settings", {
 
   getters: {
     algumaChaveConfigurada: (estado) =>
-      Boolean(estado.chaves.gemini || estado.chaves.nvidia || estado.chaves.groq),
+      Boolean(estado.chaves.gemini || estado.chaves.nvidia || estado.chaves.groq || estado.chaves.custom),
   },
 
   actions: {
     persistir() {
-      const { chaves, temperatura, modoEsforcoAutomatico, modoModeloAutomatico } = this;
-      armazenamentoConfig.salvar({ chaves, temperatura, modoEsforcoAutomatico, modoModeloAutomatico });
+      const { chaves, configuracaoPersonalizada, temperatura, modoEsforcoAutomatico, modoModeloAutomatico } = this;
+      armazenamentoConfig.salvar({
+        chaves,
+        configuracaoPersonalizada,
+        temperatura,
+        modoEsforcoAutomatico,
+        modoModeloAutomatico,
+      });
     },
 
     definirChave(provedor: keyof ChavesApi, valor: string) {
       this.chaves[provedor] = valor;
+      this.persistir();
+    },
+
+    definirConfiguracaoPersonalizada(campo: keyof ConfiguracaoLLMPersonalizada, valor: string) {
+      this.configuracaoPersonalizada[campo] = valor;
       this.persistir();
     },
 

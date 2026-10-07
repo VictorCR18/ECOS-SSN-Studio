@@ -37,6 +37,8 @@ ${descricao}
 
 Responda apenas com um objeto JSON contendo os campos: "ecos" (string), "atores" (lista de objetos com "nome" e "tipo"), "relacoes" (lista de objetos com "origem", "destino" e "tipo_fluxo") e "gateways" (lista de pontos de divergência/convergência entre atores, se houver).
 
+Nos gateways, inclua "eh_logico": true somente quando houver uma decisão/seleção lógica explícita. Use "direcao" apenas para a topologia ("split" = uma origem para dois ou mais destinos; "join" = duas ou mais origens para um destino) e "logica" apenas para a regra de seleção ("OU" ou "XOU"). Uma distribuição ou convergência comum não é gateway. Nunca troque esses campos.
+
 Não inclua nenhum texto antes ou depois do JSON.`;
 }
 
@@ -110,8 +112,10 @@ A seguir, alguns exemplos de modelos SSN corretamente construídos a partir de d
 2. Identificar os Fornecedores e suas relações de entrada (tipo_fluxo P) para o CoI;
 3. Identificar Clientes e, quando existirem, ClientesDoCliente;
 4. Identificar Intermediarios e Agregadores no caminho entre o CoI e os Clientes, e a direção correta dos fluxos Sys/Ser entre eles;
-5. Identificar pontos de split (um ator distribui para vários destinos) ou join (um ator consolida várias origens) e classificar cada um como OU ou XOU;
-6. Conferir que todo ator referenciado em "gateways" já existe em "atores" e que nenhuma regra semântica foi violada.
+5. Identificar decisões lógicas explícitas (OU/XOU), registrar "eh_logico": true e então classificar sua topologia como split ou join; não transformar toda distribuição/convergência comum em gateway;
+6. Conferir que todo ator referenciado em "gateways" já existe em "atores", que cada gateway lógico tem pelo menos duas relações correspondentes e que nenhuma regra semântica foi violada.
+
+ATENÇÃO: "direcao" e "logica" são campos independentes. "direcao" aceita apenas "split" ou "join" e descreve a topologia das relações. "logica" aceita apenas "OU" ou "XOU" e descreve a seleção das relações. Nunca troque esses campos.
 
 ${EXEMPLOS_G4}
 

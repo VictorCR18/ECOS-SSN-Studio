@@ -17,6 +17,7 @@ import {
   ShapeRegistry,
   type AbstractCanvas2D,
   type CellStyle,
+  type EdgeStyleFunction,
 } from "@maxgraph/core";
 import type { TipoAtor, TipoFluxo } from "@/types/ssn";
 
@@ -77,6 +78,33 @@ class RightForkShape extends HexagonShape {
   }
 }
 
+/** Paralelogramo com laterais inclinadas para a direita, usado pelo Agregador. */
+class ParallelogramShape extends HexagonShape {
+  override redrawPath(c: AbstractCanvas2D, _x: number, _y: number, w: number, h: number): void {
+    c.begin();
+    c.moveTo(0.18 * w, 0);
+    c.lineTo(w, 0);
+    c.lineTo(0.82 * w, h);
+    c.lineTo(0, h);
+    c.close();
+    c.fillAndStroke();
+  }
+}
+
+/** Placa de fluxo com ponta à direita, usada nos rótulos das relações. */
+class FlowShape extends HexagonShape {
+  override redrawPath(c: AbstractCanvas2D, _x: number, _y: number, w: number, h: number): void {
+    c.begin();
+    c.moveTo(0, 0);
+    c.lineTo(0.75 * w, 0);
+    c.lineTo(w, 0.5 * h);
+    c.lineTo(0.75 * w, h);
+    c.lineTo(0, h);
+    c.close();
+    c.fillAndStroke();
+  }
+}
+
 let shapesCustomizadosRegistrados = false;
 
 /** Registra o shape de pentágono uma única vez (idempotente). */
@@ -85,6 +113,8 @@ export function registrarShapesCustomizados(): void {
   ShapeRegistry.add("pentagon", PentagonShape);
   ShapeRegistry.add("leftPointingPentagon", LeftPointingPentagonShape);
   ShapeRegistry.add("rightFork", RightForkShape);
+  ShapeRegistry.add("parallelogram", ParallelogramShape);
+  ShapeRegistry.add("flow", FlowShape);
   shapesCustomizadosRegistrados = true;
 }
 
@@ -118,17 +148,18 @@ export const ESTILO_ATOR: Record<TipoAtor, CellStyle> = {
     fontColor: "#FFFFFF",
   },
   Agregador: {
-    shape: "rhombus",
-    perimeter: "rhombusPerimeter",
+    shape: "parallelogram",
+    perimeter: "rectanglePerimeter",
     fillColor: "#D64545",
-    strokeColor: "#932E2E",
+    strokeColor: "#800a0a",
+    strokeWidth: 1,
     fontColor: "#FFFFFF",
     fontStyle: 1,
   },
   ClienteDoCliente: {
     shape: "rightFork",
     fillColor: "#B8BDC2",
-    strokeColor: "#000000",
+    strokeColor: "#424141",
     strokeWidth: 1,
     fontColor: "#1A1A1A",
   },
@@ -136,29 +167,50 @@ export const ESTILO_ATOR: Record<TipoAtor, CellStyle> = {
 
 /** Tamanho padrão (largura, altura) sugerido para cada tipo de ator. */
 export const TAMANHO_ATOR: Record<TipoAtor, [number, number]> = {
-  CoI: [160, 70],
+  CoI: [160, 60],
   Fornecedor: [150, 60],
   Cliente: [150, 60],
   Intermediario: [160, 60],
-  Agregador: [110, 90],
+  Agregador: [160, 60],
   ClienteDoCliente: [150, 60],
+};
+
+const linhaDireta: EdgeStyleFunction = (estado, origem, destino, _pontos, resultado) => {
+  if (!origem || !destino) return;
+  const pontoOrigem = estado.view.getFloatingTerminalPoint(estado, origem, destino, true);
+  const pontoDestino = estado.view.getFloatingTerminalPoint(estado, destino, origem, false);
+  if (!pontoOrigem || !pontoDestino) return;
+  resultado[0] = pontoOrigem;
+  resultado.push(pontoDestino);
 };
 
 /** Estilo da aresta (relação) — igual para todos os tipos de fluxo; o rótulo os distingue. */
 export function estiloRelacao(): CellStyle {
   return {
-    noEdgeStyle: true,
+    edgeStyle: linhaDireta,
     rounded: false,
     strokeColor: "#33383D",
     strokeWidth: 1.6,
-    endArrow: "blockThin",
-    endFill: true,
+    endArrow: "none",
+    endFill: false,
     fontColor: "#1A1A1A",
     fontSize: 11,
     fontFamily: "IBM Plex Mono, monospace",
-    labelBackgroundColor: "#FFFFFF",
-    labelBorderColor: "#000000",
-    labelPadding: 4,
+    align: "center",
+    verticalAlign: "middle",
+  };
+}
+
+/** Estilo da placa que identifica o tipo de fluxo sobre a aresta. */
+export function estiloFluxo(): CellStyle {
+  return {
+    shape: "flow",
+    fillColor: "#FFFFFF",
+    strokeColor: "#1A1A1A",
+    strokeWidth: 1,
+    fontColor: "#1A1A1A",
+    fontSize: 11,
+    fontFamily: "IBM Plex Mono, monospace",
     align: "center",
     verticalAlign: "middle",
   };
@@ -173,7 +225,7 @@ export const RECORTE_FLUXO: Record<TipoFluxo, string> = {
   Sys: "Sys",
 };
 
-/** Estilo do "selo" de gateway (losango preto/texto branco), anotado sobre o ator. */
+/** Estilo do vértice de gateway lógico (losango preto com texto branco). */
 export function estiloGateway(): CellStyle {
   return {
     shape: "rhombus",

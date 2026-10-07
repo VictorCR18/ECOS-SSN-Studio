@@ -35,6 +35,7 @@ export async function gerarModeloSSN(
         esforco: parametros.esforco,
         modeloId: parametros.modeloId,
         temperatura: parametros.temperatura,
+        configuracaoPersonalizada: parametros.configuracaoPersonalizada,
         // Só é enviado o que o usuário efetivamente preencheu no Painel de
         // Configurações; campos vazios são ignorados e o backend usa a
         // chave do seu próprio .env como padrão.
@@ -42,6 +43,7 @@ export async function gerarModeloSSN(
           ...(chaves.gemini ? { gemini: chaves.gemini } : {}),
           ...(chaves.nvidia ? { nvidia: chaves.nvidia } : {}),
           ...(chaves.groq ? { groq: chaves.groq } : {}),
+          ...(chaves.custom ? { custom: chaves.custom } : {}),
         },
       }),
     });

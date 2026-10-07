@@ -13,7 +13,7 @@ const ITENS_ATOR: ItemLegenda[] = [
   { tipo: "Fornecedor", rotulo: "Fornecedor", cor: "#E38B29", formaCss: "forma-pentagono" },
   { tipo: "Cliente", rotulo: "Cliente", cor: "#E8C547", formaCss: "forma-pentagono-esquerda" },
   { tipo: "Intermediario", rotulo: "Intermediário", cor: "#3FA34D", formaCss: "forma-hexagono" },
-  { tipo: "Agregador", rotulo: "Agregador", cor: "#D64545", formaCss: "forma-losango" },
+  { tipo: "Agregador", rotulo: "Agregador", cor: "#D64545", formaCss: "forma-paralelogramo" },
   { tipo: "ClienteDoCliente", rotulo: "Cliente do Cliente", cor: "#9AA0A6", formaCss: "forma-bifurcacao-direita" },
 ];
 </script>
@@ -40,7 +40,7 @@ const ITENS_ATOR: ItemLegenda[] = [
         <p class="text-caption text-medium-emphasis mb-2">Tipos de Fluxo</p>
         <div class="d-flex flex-column ga-1">
           <div v-for="tipo in TIPOS_FLUXO" :key="tipo" class="d-flex align-start ga-2">
-            <v-chip size="x-small" label class="fonte-mono" variant="outlined">{{ tipo }}</v-chip>
+            <span class="forma-fluxo fonte-mono">{{ tipo }}</span>
             <span class="text-caption">{{ DESCRICAO_TIPO_FLUXO[tipo] }}</span>
           </div>
         </div>
@@ -50,7 +50,7 @@ const ITENS_ATOR: ItemLegenda[] = [
 
       <div class="d-flex align-center ga-3">
         <span class="selo-gateway">OU</span>
-        <span class="text-body-2">Gateway — anotação sobre o ator (split/join, lógica OU/XOU)</span>
+        <span class="text-body-2">Gateway lógico — losango conectado por arestas (split/join, lógica OU/XOU)</span>
       </div>
     </v-card-text>
   </v-card>
@@ -76,6 +76,22 @@ const ITENS_ATOR: ItemLegenda[] = [
 .forma-pentagono-esquerda {
   clip-path: polygon(0 50%, 25% 0, 100% 0, 100% 100%, 25% 100%);
 }
+.forma-fluxo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+  width: 48px;
+  min-height: 20px;
+  padding: 0 8px 0 4px;
+  background-color: #fff;
+  color: #1a1a1a;
+  border: 1px solid #1a1a1a;
+  clip-path: polygon(0 0, 75% 0, 100% 50%, 75% 100%, 0 100%);
+  flex-shrink: 0;
+}
 .forma-bifurcacao-direita {
   clip-path: polygon(0 0, 100% 0, 68% 50%, 100% 100%, 0 100%);
   border: 1px solid #000;
@@ -85,6 +101,10 @@ const ITENS_ATOR: ItemLegenda[] = [
 }
 .forma-losango {
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.forma-paralelogramo {
+  clip-path: polygon(18% 0, 100% 0, 82% 100%, 0 100%);
+  border: 1px solid #000;
 }
 .selo-gateway {
   display: inline-flex;

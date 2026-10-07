@@ -12,6 +12,8 @@ export interface DefinicaoModeloLLM {
   notaDesempenho?: string;
 }
 
+export const MODELO_PERSONALIZADO_ID = "custom";
+
 export const MODELOS_LLM: DefinicaoModeloLLM[] = [
   {
     id: "gemini-3.5-flash",
@@ -65,6 +67,14 @@ export interface ChavesApi {
   gemini: string;
   nvidia: string;
   groq: string;
+  custom: string;
+}
+
+/** Configuração de qualquer endpoint compatível com OpenAI Chat Completions. */
+export interface ConfiguracaoLLMPersonalizada {
+  nome: string;
+  endpoint: string;
+  modelo: string;
 }
 
 export interface ParametrosGeracao {
@@ -74,6 +84,7 @@ export interface ParametrosGeracao {
   esforco: EsforcoGeracao;
   modeloId: string;
   temperatura: number;
+  configuracaoPersonalizada?: ConfiguracaoLLMPersonalizada;
 }
 
 export interface RespostaLLM {

@@ -14,6 +14,7 @@ export interface ChamadaProvedorParams {
   prompt: string;
   temperatura: number;
   esforco: ParametrosEsforco;
+  endpoint?: string;
 }
 
 export async function chamarGemini({

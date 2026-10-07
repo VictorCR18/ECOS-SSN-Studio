@@ -20,7 +20,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 
 import { gerarModeloSSN } from "./llmService";
 import { LLMServiceError } from "../src/types/llm";
-import type { ChavesApi } from "../src/types/llm";
+import type { ChavesApi, ConfiguracaoLLMPersonalizada } from "../src/types/llm";
 import type { EsforcoGeracao, EstrategiaPrompt } from "../src/types/ssn";
 import { MODELOS_LLM, definicaoDoModelo } from "../src/types/llm";
 
@@ -35,6 +35,7 @@ function chavesDoAmbiente(): ChavesApi {
     gemini: process.env.GEMINI_API_KEY ?? "",
     nvidia: process.env.NVIDIA_API_KEY ?? "",
     groq: process.env.GROQ_API_KEY ?? "",
+    custom: process.env.CUSTOM_LLM_API_KEY ?? "",
   };
 }
 
@@ -45,6 +46,7 @@ function resolverChaves(chavesRecebidas: Partial<ChavesApi> | undefined): Chaves
     gemini: chavesRecebidas?.gemini?.trim() || doAmbiente.gemini,
     nvidia: chavesRecebidas?.nvidia?.trim() || doAmbiente.nvidia,
     groq: chavesRecebidas?.groq?.trim() || doAmbiente.groq,
+    custom: chavesRecebidas?.custom?.trim() || doAmbiente.custom,
   };
 }
 
@@ -58,6 +60,7 @@ app.get("/api/status", (_req: Request, res: Response) => {
     gemini: Boolean(chaves.gemini),
     nvidia: Boolean(chaves.nvidia),
     groq: Boolean(chaves.groq),
+    custom: Boolean(chaves.custom),
     modelos: MODELOS_LLM.map((m) => ({ id: m.id, provedor: m.provedor, rotulo: m.rotulo })),
   });
 });
@@ -70,6 +73,7 @@ interface CorpoGerarModelo {
   modeloId: string;
   temperatura: number;
   chaves?: Partial<ChavesApi>;
+  configuracaoPersonalizada?: ConfiguracaoLLMPersonalizada;
 }
 
 app.post("/api/gerar-modelo", async (req: Request, res: Response) => {
@@ -79,7 +83,11 @@ app.post("/api/gerar-modelo", async (req: Request, res: Response) => {
     res.status(400).json({ erro: 'Campo "descricao" é obrigatório.' });
     return;
   }
-  if (!corpo.modeloId || !definicaoDoModelo(corpo.modeloId)) {
+  const modeloPersonalizadoValido =
+    corpo.modeloId === "custom" &&
+    Boolean(corpo.configuracaoPersonalizada?.endpoint?.trim()) &&
+    Boolean(corpo.configuracaoPersonalizada?.modelo?.trim());
+  if (!corpo.modeloId || (!definicaoDoModelo(corpo.modeloId) && !modeloPersonalizadoValido)) {
     res.status(400).json({ erro: `Modelo desconhecido: ${String(corpo.modeloId)}` });
     return;
   }
@@ -93,6 +101,7 @@ app.post("/api/gerar-modelo", async (req: Request, res: Response) => {
         esforco: corpo.esforco ?? "medio",
         modeloId: corpo.modeloId,
         temperatura: typeof corpo.temperatura === "number" ? corpo.temperatura : 0.3,
+        configuracaoPersonalizada: corpo.configuracaoPersonalizada,
       },
       resolverChaves(corpo.chaves),
     );
