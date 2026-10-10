@@ -16,7 +16,12 @@ function obterSvgDoContainer(container: HTMLElement): SVGSVGElement {
   if (!svg) {
     throw new Error("Não foi possível localizar o diagrama renderizado para exportação.");
   }
+
   return svg as SVGSVGElement;
+}
+
+function removerElementosDeInterface(svg: SVGSVGElement): void {
+  svg.querySelectorAll("[data-graph-ui='true']").forEach((elemento) => elemento.remove());
 }
 
 interface RetanguloExportacao {
@@ -36,6 +41,7 @@ function medirConteudo(svg: SVGSVGElement): RetanguloExportacao {
 function construirSvgExportavel(svgOriginal: SVGSVGElement, caixa: RetanguloExportacao): SVGSVGElement {
   const margem = MARGEM_PADRAO;
   const clone = svgOriginal.cloneNode(true) as SVGSVGElement;
+  removerElementosDeInterface(clone);
 
   const viewBoxX = caixa.x - margem;
   const viewBoxY = caixa.y - margem;

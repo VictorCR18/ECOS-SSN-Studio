@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useEcosStore } from "@/stores/ecosStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { ESTRATEGIAS_PROMPT, ESFORCOS } from "@/types/ssn";
-import { MODELOS_LLM, MODELO_PERSONALIZADO_ID, definicaoDoModelo } from "@/types/llm";
-import { modeloRecomendado, JUSTIFICATIVA_POR_ESTRATEGIA } from "@/services/modelSelector";
 import { sugerirEsforcoInicial } from "@/services/effortService";
+import { chaveDoModelo, rotuloDoProvedor } from "@/data/modelCatalog";
+import { filtrarModelos, type ItemDeModelo } from "@/utils/modelFilter";
 
 const ecos = useEcosStore();
 const settings = useSettingsStore();
+const buscaModelo = ref("");
+
+onMounted(() => {
+  // Não chamar garantirModeloDisponivel() antes: a carga marca os provedores como "carregando"
+  // e, ao terminar, reajusta a seleção. Chamar antes zerava a escolha salva (fora do catálogo).
+  void settings.carregarModelosConfigurados();
+});
 
 const estrategiaAtual = computed({
   get: () => settings.estrategiaSelecionada,
@@ -29,8 +36,6 @@ const descricaoEstrategia = computed(
   () => ESTRATEGIAS_PROMPT.find((e) => e.valor === estrategiaAtual.value)?.descricao ?? "",
 );
 
-const justificativaModelo = computed(() => JUSTIFICATIVA_POR_ESTRATEGIA[estrategiaAtual.value]);
-
 const esforcoSugeridoInicial = computed(() =>
   ecos.descricaoAtual.trim() ? sugerirEsforcoInicial(ecos.descricaoAtual) : null,
 );
@@ -42,20 +47,86 @@ function aoAlterarDescricao(valor: string | null) {
   }
 }
 
-const rotuloModeloAtual = computed(() => definicaoDoModelo(modeloAtual.value)?.rotulo ?? modeloAtual.value);
+interface ItemSeletor extends ItemDeModelo {
+  type?: "subheader";
+  disabled?: boolean;
+  subtitle?: string;
+  prependIcon?: string;
+}
 
-const modelosDisponiveis = computed(() => [
-  ...MODELOS_LLM,
-  {
-    id: MODELO_PERSONALIZADO_ID,
-    provedor: "custom" as const,
-    rotulo: settings.configuracaoPersonalizada.nome.trim() || "LLM personalizada",
-  },
-]);
+function segundosDeCooldown(chave: string): number {
+  return Math.max(0, Math.ceil((settings.cooldowns[chave] - Date.now()) / 1000));
+}
+
+const modelosDisponiveis = computed<ItemSeletor[]>(() => {
+  if (!settings.algumaChaveConfigurada) {
+    return [{ value: "__adicionar-chave__", title: "＋ Adicionar chave de API" }];
+  }
+  const itens: ItemSeletor[] = [];
+  let provedorAnterior: string | undefined;
+  for (const modelo of settings.availableModels) {
+    if (modelo.provider !== provedorAnterior) {
+      provedorAnterior = modelo.provider;
+      itens.push({
+        value: `header:${modelo.provider}`,
+        title: rotuloDoProvedor[modelo.provider],
+        type: "subheader",
+        header: true,
+        provider: modelo.provider,
+      });
+    }
+    const chave = chaveDoModelo(modelo);
+    const emCooldown = settings.cooldowns[chave] > Date.now();
+    const estado = settings.estadoDoModelo(chave);
+    const detalhes = [
+      modelo.id !== modelo.label ? modelo.id : "",
+      modelo.preview ? "preview" : "",
+      estado === "ok" ? "" : settings.verificando[chave] ? "verificando…" : "não verificado",
+    ].filter(Boolean);
+    itens.push({
+      value: chave,
+      title: emCooldown
+        ? `${modelo.label} — Limite atingido · volta em ${segundosDeCooldown(chave)}s`
+        : modelo.label,
+      subtitle: detalhes.join(" · ") || undefined,
+      prependIcon: estado === "ok" ? "mdi-check-circle-outline" : "mdi-help-circle-outline",
+      disabled: emCooldown,
+      provider: modelo.provider,
+      id: modelo.id,
+    });
+  }
+  return itens;
+});
+
+const tituloSelecionado = computed(
+  () => modelosDisponiveis.value.find((item) => item.value === settings.modeloSelecionado)?.title,
+);
+
+// O filtro vive aqui (e não no Vuetify, ver `no-filter` no template) para poder buscar também
+// pelo ID cru ("nvidia/nemo", "google/gemma") e para não esconder os demais modelos quando o
+// Vuetify copia o título do selecionado para o campo de busca.
+const modelosFiltrados = computed(() =>
+  filtrarModelos(modelosDisponiveis.value, buscaModelo.value, tituloSelecionado.value),
+);
+
+const listasIncompletas = computed(() =>
+  (Object.keys(settings.chaves) as (keyof typeof settings.chaves)[]).flatMap((provider) => {
+    const origem = settings.origemModelos[provider];
+    return settings.chaves[provider] && origem?.origem === "catalogo"
+      ? [{ provider, rotulo: rotuloDoProvedor[provider], erro: origem.erro }]
+      : [];
+  }),
+);
+
+const carregandoLista = computed(() => Object.values(settings.carregandoModelos).some(Boolean));
 
 const podeGerar = computed(
-  () => ecos.descricaoAtual.trim().length > 10 && !ecos.gerando,
+  () => ecos.descricaoAtual.trim().length > 10 && !ecos.gerando && Boolean(settings.modeloSelecionado),
 );
+
+function atualizarModelo(valor: string) {
+  settings.definirModelo(valor);
+}
 
 async function aoClicarGerar() {
   await ecos.gerarModelo();
@@ -138,30 +209,69 @@ async function aoClicarGerar() {
           <span class="text-subtitle-2">Modelo (LLM)</span>
           <v-switch
             :model-value="settings.modoModeloAutomatico"
-            label="Recomendado"
+            label="Automático"
             density="compact"
             color="secondary"
             hide-details
             @update:model-value="settings.definirModoModeloAutomatico(Boolean($event))"
           />
         </div>
-        <v-select
-          v-model="modeloAtual"
-          :items="modelosDisponiveis"
-          item-title="rotulo"
-          item-value="id"
-          :disabled="settings.modoModeloAutomatico"
+        <v-autocomplete
+          :model-value="modeloAtual"
+          :items="modelosFiltrados"
+          item-title="title"
+          item-value="value"
+          :item-props="(item: ItemSeletor) => ({ subtitle: item.subtitle, prependIcon: item.prependIcon, disabled: item.disabled })"
+          v-model:search="buscaModelo"
+          no-filter
+          :loading="carregandoLista"
+          :no-data-text="settings.algumaChaveConfigurada ? 'Nenhum modelo encontrado' : 'Adicione uma chave de API'"
+          :disabled="settings.modoModeloAutomatico && settings.algumaChaveConfigurada"
           density="comfortable"
           hide-details
+          @update:model-value="atualizarModelo"
         />
-        <p class="text-caption text-medium-emphasis mt-1 mb-0">
-          <template v-if="settings.modoModeloAutomatico">
-            <strong>{{ rotuloModeloAtual }}</strong> — {{ justificativaModelo }}
-          </template>
-          <template v-else>
-            Sugestão do TCC para {{ estrategiaAtual }}: {{ definicaoDoModelo(modeloRecomendado(estrategiaAtual))?.rotulo }}
-          </template>
+        <p v-if="!settings.algumaChaveConfigurada" class="text-caption text-medium-emphasis mt-1 mb-0">
+          Nenhum modelo disponível. Adicione uma chave de API para gerar modelos.
         </p>
+        <v-alert
+          v-for="lista in listasIncompletas"
+          :key="lista.provider"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mt-2 text-caption"
+        >
+          Não consegui obter a lista completa de {{ lista.rotulo }}
+          <span v-if="lista.erro">({{ lista.erro }})</span>. Mostrando só os modelos conhecidos.
+        </v-alert>
+        <v-alert
+          v-if="settings.avisoModelo"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mt-2 text-caption"
+          closable
+          @click:close="settings.limparAvisoModelo()"
+        >
+          {{ settings.avisoModelo }}
+        </v-alert>
+        <v-switch
+          :model-value="settings.somenteVerificados"
+          label="Mostrar só modelos já verificados"
+          density="compact"
+          color="secondary"
+          hide-details
+          @update:model-value="settings.definirSomenteVerificados(Boolean($event))"
+        />
+        <v-switch
+          :model-value="settings.trocarModeloAutomaticamente"
+          label="Trocar automaticamente de modelo quando atingir o limite"
+          density="compact"
+          color="secondary"
+          hide-details
+          @update:model-value="settings.definirTrocaAutomatica(Boolean($event))"
+        />
       </div>
 
       <v-btn
@@ -175,6 +285,9 @@ async function aoClicarGerar() {
       >
         Gerar Modelo SSN
       </v-btn>
+      <v-alert v-if="ecos.aviso" type="info" variant="tonal" density="comfortable">
+        {{ ecos.aviso }}
+      </v-alert>
 
       <v-alert
         v-if="ecos.erro"

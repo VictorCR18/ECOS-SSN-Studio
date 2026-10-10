@@ -4,9 +4,9 @@
 // Alto) para os parâmetros específicos de "raciocínio" de cada modelo/API,
 // conforme documentado em executor_experimento.ts. Cada provedor/modelo tem
 // um mecanismo diferente:
-//  - Gemini: thinkingConfig.thinkingBudget (número de tokens de raciocínio)
-//  - Groq (GPT-OSS, Kimi K3, Qwen 3.8): campo reasoning_effort (string)
-//  - NVIDIA NIM (Nemotron 3 Ultra, DeepSeek V4 Pro): chat_template_kwargs
+//  - Gemini 2.5: thinkingConfig.thinkingBudget (tokens); Gemini 3.x: thinkingConfig.thinkingLevel
+//  - Groq (GPT-OSS, Qwen 3.8): campo reasoning_effort (string)
+//  - NVIDIA NIM (Nemotron 3 Ultra): chat_template_kwargs; Kimi K3: reasoning_effort
 //    com uma chave booleana ligando/desligando o "thinking"
 //
 // Também contém a heurística de sugestão automática de esforço com base no
@@ -16,9 +16,12 @@
 //   - mais de 25     -> Alto
 
 import type { EsforcoGeracao } from "../types/ssn";
+import { separarChaveDoModelo } from "../data/modelCatalog";
 
 type MecanismoEsforco =
   | { tipo: "gemini_thinking_budget"; valores: Record<EsforcoGeracao, number> }
+  | { tipo: "gemini_thinking_level"; valores: Record<EsforcoGeracao, "low" | "medium" | "high"> }
+  | { tipo: "anthropic_thinking_budget"; valores: Record<EsforcoGeracao, number> }
   | { tipo: "reasoning_effort"; valores: Record<EsforcoGeracao, string> }
   | { tipo: "chat_template_kwargs_bool"; chave: string; valores: Record<EsforcoGeracao, boolean> };
 
@@ -27,19 +30,26 @@ type MecanismoEsforco =
  * mecanismo padrão do seu provedor (ver `mecanismoPadraoDoProvedor`).
  */
 const MECANISMOS_POR_MODELO: Record<string, MecanismoEsforco> = {
-  "gemini-3.5-flash": {
-    tipo: "gemini_thinking_budget",
-    valores: { baixo: 0, medio: 1024, alto: 4096 },
+  "gpt-5": {
+    tipo: "reasoning_effort",
+    valores: { baixo: "low", medio: "medium", alto: "high" },
+  },
+  "gpt-5-mini": {
+    tipo: "reasoning_effort",
+    valores: { baixo: "low", medio: "medium", alto: "high" },
+  },
+  "claude-sonnet-4-5-20250929": {
+    tipo: "anthropic_thinking_budget",
+    valores: { baixo: 1024, medio: 4096, alto: 8192 },
+  },
+  "claude-haiku-4-5-20251001": {
+    tipo: "anthropic_thinking_budget",
+    valores: { baixo: 1024, medio: 4096, alto: 8192 },
   },
   // Nemotron 3 Ultra só permite ligar/desligar o thinking (sem granularidade).
   "nvidia/nemotron-3-ultra-550b-a55b": {
     tipo: "chat_template_kwargs_bool",
     chave: "enable_thinking",
-    valores: { baixo: false, medio: true, alto: true },
-  },
-  "deepseek-ai/deepseek-v4-pro-0813": {
-    tipo: "chat_template_kwargs_bool",
-    chave: "thinking",
     valores: { baixo: false, medio: true, alto: true },
   },
   // Kimi K3 "always reasons": não existe nível "off"; usamos low/high/max.
@@ -59,10 +69,36 @@ const MECANISMOS_POR_MODELO: Record<string, MecanismoEsforco> = {
   },
 };
 
+/**
+ * Gemini: a família 3.x (3.5 Flash, 3.6, 3.7, 3.8...) controla o raciocínio por
+ * `thinkingLevel` e NÃO aceita bem `thinkingBudget` (o valor 0, usado antes para
+ * "Baixo", é recusado porque esses modelos só funcionam pensando; enviar os dois
+ * campos juntos devolve HTTP 400). A família 2.5 segue usando `thinkingBudget`.
+ * Usamos "low" (e não "minimal") para "Baixo" porque o Gemini 3.7 Flash e o 3.1 Pro
+ * não aceitam "minimal".
+ */
+export function versaoPrincipalDoGemini(id: string): number | undefined {
+  const m = /^gemini-(\d+)(?:\.\d+)?-/.exec(id);
+  return m ? Number(m[1]) : undefined;
+}
+
+function mecanismoDoGemini(id: string): MecanismoEsforco | undefined {
+  const versao = versaoPrincipalDoGemini(id);
+  if (versao !== undefined && versao >= 3) {
+    return { tipo: "gemini_thinking_level", valores: { baixo: "low", medio: "medium", alto: "high" } };
+  }
+  if (/^gemini-2\.5-flash/.test(id)) {
+    return { tipo: "gemini_thinking_budget", valores: { baixo: 0, medio: 1024, alto: 4096 } };
+  }
+  return undefined;
+}
+
 /** Parâmetros extras (fora de model/messages/temperature) a mesclar na chamada da API. */
 export interface ParametrosEsforco {
-  /** Para o SDK do Gemini: mesclar em `config.thinkingConfig`. */
-  geminiThinkingConfig?: { thinkingBudget: number };
+  /** Para o SDK do Gemini: mesclar em `config.thinkingConfig` (`thinkingLevel` no 3.x, `thinkingBudget` no 2.5). */
+  geminiThinkingConfig?: { thinkingBudget?: number; thinkingLevel?: "low" | "medium" | "high" };
+  /** Para o SDK da Anthropic: orçamento do extended thinking. */
+  anthropicThinkingBudget?: number;
   /** Para Groq/OpenAI-compatible: campo de nível raiz do corpo da requisição. */
   reasoningEffort?: string;
   /** Para NVIDIA NIM: campo `chat_template_kwargs` do corpo da requisição. */
@@ -70,12 +106,17 @@ export interface ParametrosEsforco {
 }
 
 export function obterParametrosEsforco(modeloId: string, esforco: EsforcoGeracao): ParametrosEsforco {
-  const mecanismo = MECANISMOS_POR_MODELO[modeloId];
+  const id = separarChaveDoModelo(modeloId)?.id ?? modeloId;
+  const mecanismo = MECANISMOS_POR_MODELO[id] ?? mecanismoDoGemini(id);
   if (!mecanismo) return {};
 
   switch (mecanismo.tipo) {
     case "gemini_thinking_budget":
       return { geminiThinkingConfig: { thinkingBudget: mecanismo.valores[esforco] } };
+    case "gemini_thinking_level":
+      return { geminiThinkingConfig: { thinkingLevel: mecanismo.valores[esforco] } };
+    case "anthropic_thinking_budget":
+      return { anthropicThinkingBudget: mecanismo.valores[esforco] };
     case "reasoning_effort":
       return { reasoningEffort: mecanismo.valores[esforco] };
     case "chat_template_kwargs_bool":

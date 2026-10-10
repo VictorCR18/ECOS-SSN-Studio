@@ -216,8 +216,31 @@ export function estiloFluxo(): CellStyle {
   };
 }
 
+/** Dimensões compartilhadas pela placa da legenda e pelos rótulos nas arestas. */
+export const DIMENSOES_FLUXO = {
+  altura: 22,
+  larguraMinima: 48,
+  paddingHorizontal: 8,
+  paddingEsquerda: 4,
+} as const;
+
+export const ESTILO_LEGENDA_FLUXO = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxSizing: "border-box",
+  width: `${DIMENSOES_FLUXO.larguraMinima}px`,
+  minHeight: `${DIMENSOES_FLUXO.altura}px`,
+  padding: `0 ${DIMENSOES_FLUXO.paddingHorizontal}px 0 ${DIMENSOES_FLUXO.paddingEsquerda}px`,
+  backgroundColor: "#FFFFFF",
+  color: "#1A1A1A",
+  border: "1px solid #1A1A1A",
+  clipPath: "polygon(0 0, 75% 0, 100% 50%, 75% 100%, 0 100%)",
+  flexShrink: "0",
+} as const;
+
 export const RECORTE_FLUXO: Record<TipoFluxo, string> = {
-  P: "P  ",
+  P: "P",
   Ser: "Ser",
   Req: "Req",
   Des: "Des",

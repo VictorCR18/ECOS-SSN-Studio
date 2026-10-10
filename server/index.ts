@@ -11,18 +11,20 @@
 // Em produção (`npm run build && npm start`), este mesmo processo também
 // serve os arquivos estáticos gerados em dist/.
 
-import "dotenv/config";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 
-import { gerarModeloSSN } from "./llmService";
+import { ErroLimiteUso, ErroModeloIndisponivelError, gerarModeloSSN, verificarModelo } from "./llmService";
+import { ErroListagem, listarModelosDoProvedor } from "./listarModelos";
 import { LLMServiceError } from "../src/types/llm";
 import type { ChavesApi, ConfiguracaoLLMPersonalizada } from "../src/types/llm";
 import type { EsforcoGeracao, EstrategiaPrompt } from "../src/types/ssn";
-import { MODELOS_LLM, definicaoDoModelo } from "../src/types/llm";
+import { definicaoDoModelo } from "../src/types/llm";
+import type { ProvedorLLM } from "../src/types/ssn";
+import { separarChaveDoModelo } from "../src/data/modelCatalog";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ_PROJETO = path.resolve(__dirname, "..");
@@ -30,23 +32,14 @@ const DIST_DIR = path.join(RAIZ_PROJETO, "dist");
 
 const PORT = Number(process.env.PORT ?? 3001);
 
-function chavesDoAmbiente(): ChavesApi {
-  return {
-    gemini: process.env.GEMINI_API_KEY ?? "",
-    nvidia: process.env.NVIDIA_API_KEY ?? "",
-    groq: process.env.GROQ_API_KEY ?? "",
-    custom: process.env.CUSTOM_LLM_API_KEY ?? "",
-  };
-}
-
-/** Mescla chaves enviadas pelo cliente (override opcional) com as do servidor. */
 function resolverChaves(chavesRecebidas: Partial<ChavesApi> | undefined): ChavesApi {
-  const doAmbiente = chavesDoAmbiente();
   return {
-    gemini: chavesRecebidas?.gemini?.trim() || doAmbiente.gemini,
-    nvidia: chavesRecebidas?.nvidia?.trim() || doAmbiente.nvidia,
-    groq: chavesRecebidas?.groq?.trim() || doAmbiente.groq,
-    custom: chavesRecebidas?.custom?.trim() || doAmbiente.custom,
+    openai: chavesRecebidas?.openai?.trim() ?? "",
+    anthropic: chavesRecebidas?.anthropic?.trim() ?? "",
+    gemini: chavesRecebidas?.gemini?.trim() ?? "",
+    deepseek: chavesRecebidas?.deepseek?.trim() ?? "",
+    nvidia: chavesRecebidas?.nvidia?.trim() ?? "",
+    groq: chavesRecebidas?.groq?.trim() ?? "",
   };
 }
 
@@ -54,15 +47,45 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-app.get("/api/status", (_req: Request, res: Response) => {
-  const chaves = chavesDoAmbiente();
-  res.json({
-    gemini: Boolean(chaves.gemini),
-    nvidia: Boolean(chaves.nvidia),
-    groq: Boolean(chaves.groq),
-    custom: Boolean(chaves.custom),
-    modelos: MODELOS_LLM.map((m) => ({ id: m.id, provedor: m.provedor, rotulo: m.rotulo })),
-  });
+interface CorpoListarModelos {
+  provider?: ProvedorLLM;
+  apiKey?: string;
+}
+
+app.post("/api/modelos", async (req: Request, res: Response) => {
+  const corpo = req.body as CorpoListarModelos;
+  if (!corpo.provider || !corpo.apiKey?.trim()) {
+    res.status(400).json({ erro: "Provedor e chave de API são obrigatórios." });
+    return;
+  }
+  try {
+    res.json(await listarModelosDoProvedor(corpo.provider, corpo.apiKey.trim()));
+  } catch (erro) {
+    console.warn(`[modelos] Falha ao listar modelos de ${corpo.provider}:`, erro instanceof Error ? erro.message : erro);
+    const status = erro instanceof ErroListagem ? erro.status : undefined;
+    // 400 (Gemini devolve 400 para chave inválida), 401 e 403: a chave não serve para este provedor.
+    if (status === 400 || status === 401 || status === 403) {
+      res.status(401).json({ erro: "O provedor recusou a chave de API informada." });
+      return;
+    }
+    res.status(502).json({ erro: "Não foi possível listar os modelos do provedor." });
+  }
+});
+
+interface CorpoTestarModelo {
+  provider?: ProvedorLLM;
+  modeloId?: string;
+  apiKey?: string;
+}
+
+// Chamada mínima (1 requisição curta) para saber se o provedor ainda serve o modelo.
+app.post("/api/testar-modelo", async (req: Request, res: Response) => {
+  const corpo = req.body as CorpoTestarModelo;
+  if (!corpo.provider || !corpo.modeloId?.trim() || !corpo.apiKey?.trim()) {
+    res.status(400).json({ erro: "Provedor, modelo e chave de API são obrigatórios." });
+    return;
+  }
+  res.json(await verificarModelo(corpo.provider, corpo.modeloId.trim(), corpo.apiKey.trim()));
 });
 
 interface CorpoGerarModelo {
@@ -83,12 +106,17 @@ app.post("/api/gerar-modelo", async (req: Request, res: Response) => {
     res.status(400).json({ erro: 'Campo "descricao" é obrigatório.' });
     return;
   }
-  const modeloPersonalizadoValido =
-    corpo.modeloId === "custom" &&
-    Boolean(corpo.configuracaoPersonalizada?.endpoint?.trim()) &&
-    Boolean(corpo.configuracaoPersonalizada?.modelo?.trim());
-  if (!corpo.modeloId || (!definicaoDoModelo(corpo.modeloId) && !modeloPersonalizadoValido)) {
+  const partesModelo = corpo.modeloId ? separarChaveDoModelo(corpo.modeloId) : undefined;
+  const definicao = corpo.modeloId ? definicaoDoModelo(corpo.modeloId) : undefined;
+  if (!corpo.modeloId || (!definicao && !partesModelo)) {
     res.status(400).json({ erro: `Modelo desconhecido: ${String(corpo.modeloId)}` });
+    return;
+  }
+  const provedor = definicao?.provider ?? partesModelo!.provider;
+  if (!corpo.chaves?.[provedor]?.trim()) {
+    res.status(400).json({
+      erro: `Nenhuma chave de API do provedor ${provedor} foi configurada. Adicione uma chave no Painel de Configurações.`,
+    });
     return;
   }
 
@@ -112,11 +140,19 @@ app.post("/api/gerar-modelo", async (req: Request, res: Response) => {
     // devolvemos a resposta bruta da LLM.
     res.json(resposta);
   } catch (erro) {
+    if (erro instanceof LLMServiceError && erro.causaOriginal instanceof ErroLimiteUso) {
+      res.status(429).json(erro.causaOriginal.detalhe);
+      return;
+    }
+    if (erro instanceof LLMServiceError && erro.causaOriginal instanceof ErroModeloIndisponivelError) {
+      res.status(410).json(erro.causaOriginal.detalhe);
+      return;
+    }
     const mensagem =
       erro instanceof LLMServiceError || erro instanceof Error
         ? erro.message
         : "Falha desconhecida ao gerar o modelo.";
-    console.error("[POST /api/gerar-modelo]", mensagem);
+    console.error("[POST /api/gerar-modelo] Falha ao chamar o provedor.");
     res.status(502).json({ erro: mensagem });
   }
 });
@@ -134,17 +170,5 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.listen(PORT, () => {
-  const chaves = chavesDoAmbiente();
   console.log(`\n[ECOS SSN Studio] API rodando em http://localhost:${PORT}`);
-  console.log(
-    `  Gemini: ${chaves.gemini ? "configurada" : "não configurada"} · ` +
-      `NVIDIA NIM: ${chaves.nvidia ? "configurada" : "não configurada"} · ` +
-      `Groq: ${chaves.groq ? "configurada" : "não configurada"}`,
-  );
-  if (!chaves.gemini && !chaves.nvidia && !chaves.groq) {
-    console.warn(
-      "  Nenhuma chave de API configurada no .env — configure GEMINI_API_KEY / NVIDIA_API_KEY / GROQ_API_KEY, " +
-        "ou informe uma chave pessoal no Painel de Configurações do app.\n",
-    );
-  }
 });

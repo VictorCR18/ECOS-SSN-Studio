@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useTheme } from "vuetify";
 import { useDisplay } from "vuetify";
 import { useEcosStore } from "@/stores/ecosStore";
@@ -10,6 +10,8 @@ import ModelHistory from "@/components/ModelHistory.vue";
 import DiagramViewer from "@/components/DiagramViewer.vue";
 import SsnLegend from "@/components/SsnLegend.vue";
 import ValidationPanel from "@/components/ValidationPanel.vue";
+import { definicaoDoModelo } from "@/types/llm";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 const ecos = useEcosStore();
 const theme = useTheme();
@@ -20,6 +22,40 @@ const drawerRecolhido = ref(false);
 const diagramaExpandido = ref(false);
 const painelDireitaAberto = ref(true);
 const painelAtivo = ref(["editor"]);
+const segundosRestantes = ref(0);
+let relogio: number | undefined;
+
+const alternativasDeLimite = computed(() => {
+  if (!ecos.erroLimite) return [];
+  return ecos.alternativasPara(
+    ecos.erroLimite.model,
+    definicaoDoModelo(ecos.erroLimite.model),
+  );
+});
+watch(
+  () => ecos.erroLimite,
+  (limite) => {
+    segundosRestantes.value = limite?.retryAfterSeconds ?? 0;
+  },
+  { immediate: true },
+);
+
+function abrirProvedores() {
+  if (!painelAtivo.value.includes("config")) painelAtivo.value.push("config");
+  requestAnimationFrame(() => document.getElementById("provedores")?.scrollIntoView({ behavior: "smooth" }));
+}
+
+onMounted(() => {
+  window.addEventListener("ecos:abrir-provedores", abrirProvedores);
+  relogio = window.setInterval(() => {
+    if (segundosRestantes.value > 0) segundosRestantes.value -= 1;
+    useSettingsStore().limparCooldownsExpirados();
+  }, 1000);
+});
+onUnmounted(() => {
+  window.removeEventListener("ecos:abrir-provedores", abrirProvedores);
+  if (relogio) window.clearInterval(relogio);
+});
 
 function alternarTema() {
   theme.global.name.value = theme.global.name.value === "ecosLight" ? "ecosDark" : "ecosLight";
@@ -136,8 +172,8 @@ function alternarTema() {
       <SsnLegend />
     </v-navigation-drawer>
 
-    <v-main class="fill-height">
-      <div class="d-flex flex-column pa-3 ga-3" style="height: 100%">
+    <v-main class="fill-height ambiente-modelagem">
+      <div class="d-flex flex-column pa-3 ga-3" style="height: 100%" :class="{ 'ambiente-carregando': ecos.gerando }">
         <ValidationPanel />
         <div style="flex: 1; min-height: 0">
           <DiagramViewer
@@ -146,6 +182,83 @@ function alternarTema() {
           />
         </div>
       </div>
+      <div v-if="ecos.gerando" class="camada-carregamento" role="status" aria-live="polite">
+        <v-progress-circular indeterminate color="primary" size="42" class="mb-3" />
+        <div class="text-body-1 font-weight-medium mb-3">Carregando modelo…</div>
+        <v-btn
+          color="primary"
+          variant="flat"
+          prepend-icon="mdi-close-circle-outline"
+          @click="ecos.cancelarGeracao()"
+        >
+          Cancelar
+        </v-btn>
+      </div>
     </v-main>
+
+    <v-dialog :model-value="Boolean(ecos.erroLimite)" max-width="560" @update:model-value="(aberto) => { if (!aberto) ecos.erroLimite = null }">
+      <v-card v-if="ecos.erroLimite">
+        <v-card-title>O modelo atingiu o limite de uso</v-card-title>
+        <v-card-text>
+          <p class="mb-3">
+            O modelo <strong>{{ definicaoDoModelo(ecos.erroLimite.model)?.label ?? ecos.erroLimite.model }}</strong>
+            atingiu o limite de uso.
+          </p>
+          <p v-if="ecos.erroLimite.code !== 'QUOTA_EXCEEDED' && segundosRestantes > 0" class="text-medium-emphasis mb-4">
+            Tente novamente em {{ segundosRestantes }}s.
+          </p>
+          <div v-if="alternativasDeLimite.length">
+            <div class="text-subtitle-2 mb-2">Outros modelos disponíveis</div>
+            <div class="d-flex flex-column ga-2">
+              <v-btn
+                v-for="modelo in alternativasDeLimite"
+                :key="modelo.provider + ':' + modelo.id"
+                variant="tonal"
+                block
+                @click="ecos.selecionarModeloAlternativo(modelo); ecos.gerarModelo()"
+              >
+                {{ modelo.label }}
+              </v-btn>
+            </div>
+          </div>
+          <p v-else class="text-medium-emphasis">Não há outros modelos disponíveis com as chaves configuradas.</p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            v-if="ecos.erroLimite.code !== 'QUOTA_EXCEEDED'"
+            :disabled="segundosRestantes > 0"
+            @click="ecos.tentarNovamente()"
+          >
+            Tentar novamente
+          </v-btn>
+          <v-btn variant="text" @click="ecos.erroLimite = null">Cancelar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
+
+<style scoped>
+.ambiente-modelagem {
+  position: relative;
+}
+
+.ambiente-carregando {
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+
+.camada-carregamento {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--v-theme-surface), 0.28);
+  backdrop-filter: blur(1px);
+}
+</style>

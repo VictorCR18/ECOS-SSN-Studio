@@ -8,6 +8,8 @@ import {
   TAMANHO_ATOR,
   estiloGateway,
   estiloRelacao,
+  estiloFluxo,
+  DIMENSOES_FLUXO,
   registrarShapesCustomizados,
 } from "@/services/graph/shapes";
 import {
@@ -21,6 +23,8 @@ export interface ResultadoConversao {
   cellsPorAtor: Map<string, Cell>;
   /** Texto de tooltip para cada célula criada (atores, arestas e gateways lógicos). */
   tooltips: Map<Cell, string>;
+  /** Relações renderizadas diretamente entre atores, para edição manual. */
+  relacoesPorAresta: Map<Cell, { origem: string; destino: string; tipoFluxo: string }>;
 }
 
 interface GatewayInserido {
@@ -33,6 +37,51 @@ interface GatewayInserido {
 const TAMANHO_BADGE = 42;
 const ESPACAMENTO_GATEWAY = 32;
 
+/** Insere uma relação com o mesmo estilo e placa usada pelas relações da LLM. */
+export function inserirArestaComRotulo(
+  graph: AbstractGraph,
+  parent: Cell,
+  source: Cell,
+  target: Cell,
+  value: string,
+  tooltip?: string,
+  tooltips?: Map<Cell, string>,
+): Cell {
+  const edge = graph.insertEdge({
+    parent,
+    source,
+    target,
+    value: "",
+    style: estiloRelacao(),
+  });
+  if (value) {
+    const largura = Math.max(
+      DIMENSOES_FLUXO.larguraMinima,
+      value.length * 8 + DIMENSOES_FLUXO.paddingHorizontal + DIMENSOES_FLUXO.paddingEsquerda,
+    );
+    const rotulo = graph.insertVertex({
+      parent: edge,
+      value,
+      position: [0, 0],
+      size: [largura, DIMENSOES_FLUXO.altura],
+      style: {
+        ...estiloFluxo(),
+        horizontal: true,
+        rotation: 0,
+      },
+    });
+    const geometria = rotulo.getGeometry();
+    if (geometria) {
+      geometria.relative = true;
+      geometria.x = 0;
+      geometria.y = 0;
+      graph.getDataModel().setGeometry(rotulo, geometria);
+    }
+  }
+  if (tooltip && tooltips) tooltips.set(edge, tooltip);
+  return edge;
+}
+
 export function converterModeloParaGrafo(
   graph: AbstractGraph,
   modelo: ModeloSSN,
@@ -41,6 +90,7 @@ export function converterModeloParaGrafo(
 
   const cellsPorAtor = new Map<string, Cell>();
   const tooltips = new Map<Cell, string>();
+  const relacoesPorAresta = new Map<Cell, { origem: string; destino: string; tipoFluxo: string }>();
 
   graph.batchUpdate(() => {
     limparDiagrama(graph);
@@ -126,15 +176,7 @@ export function converterModeloParaGrafo(
       value: string,
       tooltip?: string,
     ): Cell => {
-      const edge = graph.insertEdge({
-        parent,
-        source,
-        target,
-        value,
-        style: estiloRelacao(),
-      });
-      if (tooltip) tooltips.set(edge, tooltip);
-      return edge;
+      return inserirArestaComRotulo(graph, parent, source, target, value, tooltip, tooltips);
     };
 
     // Prioriza membros explícitos e usa um gateway sem membros como fallback.
@@ -195,12 +237,17 @@ export function converterModeloParaGrafo(
         }
       }
 
-      criarAresta(
+      const edge = criarAresta(
         source,
         target,
         RECORTE_FLUXO[relacao.tipo_fluxo],
         `${relacao.origem} → ${relacao.destino}\nFluxo: ${relacao.tipo_fluxo}`,
       );
+      relacoesPorAresta.set(edge, {
+        origem: relacao.origem,
+        destino: relacao.destino,
+        tipoFluxo: relacao.tipo_fluxo,
+      });
     }
 
     // 3b) Encadeamento gateway -> gateway: quando um gateway lista o `id` de
@@ -257,5 +304,5 @@ export function converterModeloParaGrafo(
 
   ajustarZoomParaCaber(graph);
 
-  return { cellsPorAtor, tooltips };
+  return { cellsPorAtor, tooltips, relacoesPorAresta };
 }

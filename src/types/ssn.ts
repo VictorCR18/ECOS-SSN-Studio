@@ -3,6 +3,8 @@
 // Brinkkemper (2009), com a extensão do ator Agregador proposta por Costa et al.
 // (2013). Espelha o schema JSON produzido pelas LLMs em executor_experimento.ts.
 
+import type { ProvedorLLM } from "../data/providerIds";
+
 /** Tipos de ator na notação SSN. */
 export type TipoAtor =
   | "CoI"
@@ -140,7 +142,7 @@ export const ESFORCOS: { valor: EsforcoGeracao; titulo: string }[] = [
   { valor: "alto", titulo: "Alto" },
 ];
 
-export type ProvedorLLM = "gemini" | "nvidia" | "groq" | "custom";
+export type { ProvedorLLM } from "../data/providerIds";
 
 export interface ErroValidacao {
   campo: string;

@@ -1,73 +1,40 @@
 // src/types/llm.ts
 // Tipos relacionados à integração com provedores de LLM.
 
-import type { EsforcoGeracao, EstrategiaPrompt, ProvedorLLM } from "./ssn";
+import {
+  modelosDoCatalogo,
+  separarChaveDoModelo,
+  type ConfiguracaoModelo,
+} from "../data/modelCatalog";
+import type { EsforcoGeracao, EstrategiaPrompt } from "./ssn";
 
-/** Um modelo concreto oferecido por um provedor (ex.: "qwen/qwen3.8-27b" via Groq). */
-export interface DefinicaoModeloLLM {
-  id: string;
-  provedor: ProvedorLLM;
-  rotulo: string;
-  /** Curto texto explicando o desempenho relatado no TCC para este modelo. */
-  notaDesempenho?: string;
+export type { ConfiguracaoModelo as DefinicaoModeloLLM };
+type DefinicaoModeloLLM = ConfiguracaoModelo;
+
+export function definicaoDoModelo(chave: string): DefinicaoModeloLLM | undefined {
+  const modelo = separarChaveDoModelo(chave);
+  if (!modelo) return undefined;
+  return {
+    id: modelo.id,
+    label: modelo.id,
+    provider: modelo.provider,
+    family: "Outros modelos",
+    capabilities: { supportsReasoning: false },
+  };
 }
 
-export const MODELO_PERSONALIZADO_ID = "custom";
-
-export const MODELOS_LLM: DefinicaoModeloLLM[] = [
-  {
-    id: "gemini-3.5-flash",
-    provedor: "gemini",
-    rotulo: "Gemini 3.5 Flash",
-    notaDesempenho: "Ampla janela de contexto (1M tokens); bom custo-benefício geral.",
-  },
-  {
-    id: "nvidia/nemotron-3-ultra-550b-a55b",
-    provedor: "nvidia",
-    rotulo: "Nemotron 3 Ultra",
-    notaDesempenho:
-      "Maior salto de desempenho entre G1→G2 no experimento; recomendado para G2/G3.",
-  },
-  {
-    id: "deepseek-ai/deepseek-v4-pro-0813",
-    provedor: "nvidia",
-    rotulo: "DeepSeek V4 Pro",
-    notaDesempenho: "Código aberto, otimizado para contextos extensos.",
-  },
-  {
-    id: "moonshotai/kimi-k3",
-    provedor: "nvidia",
-    rotulo: "Kimi K3",
-    notaDesempenho: "Sempre raciocina (\"always reasons\"); não permite desligar o thinking.",
-  },
-  {
-    id: "openai/gpt-oss-120b",
-    provedor: "groq",
-    rotulo: "GPT-OSS 120B",
-    notaDesempenho: "Modelo de raciocínio; não aceita reasoning_effort=off.",
-  },
-  {
-    id: "qwen/qwen3.8-27b",
-    provedor: "groq",
-    rotulo: "Qwen 3.8",
-    notaDesempenho: "Substituto atual do Qwen usado no experimento, disponibilizado pela Groq.",
-  },
-];
-
-export function definicaoDoModelo(id: string): DefinicaoModeloLLM | undefined {
-  return MODELOS_LLM.find((m) => m.id === id);
-}
-
-export function modelosDoProvedor(provedor: ProvedorLLM): DefinicaoModeloLLM[] {
-  return MODELOS_LLM.filter((m) => m.provedor === provedor);
+export function modelosDoProvedor(provedor: DefinicaoModeloLLM["provider"]): DefinicaoModeloLLM[] {
+  return modelosDoCatalogo(provedor);
 }
 
 /** Chaves de API mantidas apenas em memória/localStorage do navegador do usuário. */
 export interface ChavesApi {
+  openai: string;
+  anthropic: string;
   gemini: string;
+  deepseek: string;
   nvidia: string;
   groq: string;
-  custom: string;
 }
 
 /** Configuração de qualquer endpoint compatível com OpenAI Chat Completions. */
@@ -87,10 +54,47 @@ export interface ParametrosGeracao {
   configuracaoPersonalizada?: ConfiguracaoLLMPersonalizada;
 }
 
+export interface ErroLimiteUso {
+  code: "RATE_LIMIT" | "QUOTA_EXCEEDED" | "OVERLOADED";
+  provider: string;
+  model: string;
+  retryAfterSeconds?: number;
+  message: string;
+}
+
 export interface RespostaLLM {
   textoBruto: string;
   duracaoMs: number;
   tentativas: number;
+  /** Observação para o usuário (ex.: o provedor rejeitou os parâmetros de raciocínio e a chamada foi refeita sem eles). */
+  aviso?: string;
+}
+
+/** O provedor não serve mais o modelo (404/410, "end of life", sem acesso na conta...). */
+export interface ErroModeloIndisponivel {
+  code: "MODEL_UNAVAILABLE";
+  provider: string;
+  /** Chave composta `provedor:id`, a mesma usada pelo seletor de modelos. */
+  model: string;
+  message: string;
+}
+
+/**
+ * Resultado de uma chamada mínima de teste a um modelo.
+ *  - ok: o provedor respondeu (inclui 429, que prova que o modelo existe);
+ *  - indisponivel: 404/410/"deprecated"/sem acesso — não vale a pena oferecer;
+ *  - desconhecido: falha transitória (timeout, 5xx, rede); não dá para concluir.
+ */
+export interface ResultadoVerificacao {
+  estado: "ok" | "indisponivel" | "desconhecido";
+  status?: number;
+  motivo?: string;
+}
+
+/** Resposta de `/api/modelos`. */
+export interface ModeloListado {
+  id: string;
+  label?: string;
 }
 
 /** Erro de alto nível lançado pelo llmService, já traduzido para o usuário final. */

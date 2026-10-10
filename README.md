@@ -18,11 +18,17 @@ seleção de LLM/esforço documentados em `executor_experimento.ts`.
   baseline, contexto estruturado, persona + few-shot e cadeia de raciocínio
   (Chain-of-Thought).
 - **Seleção automática de LLM por estratégia**, conforme a conclusão do TCC
-  (Qwen 3.8 para G4, Nemotron 3 Ultra para G2/G3), sempre sobrescrevível
+  (Qwen 3.8 para G4, com o GPT-OSS 120B como plano B porque o 3.8 está em *preview* na Groq e o Qwen 3.6 foi desligado em 14/09/26; Nemotron 3 Ultra para G2/G3), sempre sobrescrevível
   manualmente.
+- **Catálogo dinâmico por provedor**: além dos modelos versionados no catálogo,
+  o painel consulta os modelos disponíveis para cada chave e permite cadastrar
+  um modelo adicional por ID.
+- **Tratamento de limites de uso**: erros de rate limit, cota e sobrecarga são
+  apresentados em português com cooldown, contagem regressiva e alternativas
+  explícitas. A troca automática é opcional e vem desligada.
 - **Esforço de geração adaptativo** (Baixo/Médio/Alto), estimado a partir do
   tamanho do ECOS e traduzido para o mecanismo de raciocínio específico de
-  cada modelo (`thinkingBudget` no Gemini, `reasoning_effort` na Groq,
+  cada modelo (`thinkingLevel` no Gemini 3.x e `thinkingBudget` no 2.5, `reasoning_effort` na Groq,
   `chat_template_kwargs` na NVIDIA NIM).
 - **Renderização 100% a partir de JSON** com [maxGraph](https://github.com/maxGraph/maxGraph):
   o JSON retornado pela LLM é convertido diretamente em células do grafo via
@@ -39,6 +45,33 @@ seleção de LLM/esforço documentados em `executor_experimento.ts`.
   (a API da NVIDIA NIM, por exemplo, não envia cabeçalhos CORS e por isso
   **não pode** ser chamada diretamente do navegador) e mantém as chaves de
   API fora do bundle do cliente.
+
+
+## Quais modelos aparecem (e por que alguns somem)
+
+A lista de cada provedor vem da API dele (`/api/modelos`), mas **estar listado não
+significa estar funcionando**: a NVIDIA, por exemplo, continua listando modelos já
+aposentados (como o DeepSeek V4 Pro), que respondem `HTTP 410 – end of life`. Por isso
+o app confirma com uma chamada mínima (`/api/testar-modelo`, ~1 requisição curta):
+
+- Os modelos do catálogo, os que você cadastrou e o selecionado são verificados em
+  segundo plano. Quem responde ganha o ícone ✓; quem o provedor não serve mais
+  (404/410/"end of life"/sem acesso) **some da lista** e aparece como chip no Painel de
+  Configurações. Falhas transitórias (timeout, 5xx, chave inválida) **não** escondem o modelo.
+- Ao escolher no seletor um modelo ainda não verificado, ele é testado na hora.
+- Em "Configurações", **Verificar todos** testa a lista inteira de um provedor (uma chamada
+  por modelo — pede confirmação se forem muitos) e **Reverificar** apaga o cache.
+- O resultado fica no `localStorage` (12 h para "ok", 3 h para "indisponível").
+- Se uma geração falhar com 410/404, o modelo é removido na hora e, com "trocar modelo
+  automaticamente" ligado, a geração segue com o próximo disponível.
+- `src/data/modelCatalog.ts` tem a lista de descontinuados conhecidos (`MODELOS_DESCONTINUADOS`),
+  com a data de desligamento de cada um (a da Groq vem da página "Model Deprecation"; a API
+  continua listando alguns porque clientes enterprise ainda os usam). É só um atalho: a
+  verificação cobre o resto. Ao anunciarem um novo desligamento, basta acrescentar uma linha.
+- No Gemini, um modelo que responde 429 com `limit: 0` (sem cota na sua chave/plano, como o
+  2.5 Pro no plano gratuito) também é ocultado; 429 com outro limite não esconde nada.
+- Em Configurações, ao lado de cada provedor aparece "O provedor listou N · X não são de
+  texto · Y descontinuados"; passe o mouse para ver os IDs descartados.
 
 ## Por que existe um backend?
 
@@ -75,7 +108,7 @@ Pré-requisitos: Node.js 20+.
 
 ```bash
 npm install
-cp .env.example .env   # preencha ao menos uma chave de API
+cp .env.example .env
 npm run dev            # sobe o Vite (5173) e a API Express (3001) juntos
 ```
 
@@ -101,40 +134,39 @@ npm start        # um único processo Express serve a API e os arquivos de dist/
 `PORT` no `.env`) e serve o `dist/` gerado pelo build — não precisa de mais
 nada além do Node.js rodando.
 
-### Chaves de API
+### Chaves de API e Painel de Configurações
 
-Você precisa de ao menos **uma** chave configurada no `.env` (raiz do
-projeto — variáveis lidas pelo `server/index.ts`, nunca pelo `vite`/cliente):
+As chaves são configuradas pelo próprio usuário no painel lateral
+**Configurações de API → Provedores**. O painel oferece, em coluna única,
+campos para OpenAI, Anthropic (Claude), Google Gemini, DeepSeek, NVIDIA NIM e
+Groq, com links para criar cada chave. O valor salvo fica apenas no
+`localStorage` daquele navegador; o backend recebe a chave somente durante a
+requisição de geração, não a persiste nem a usa como fallback de ambiente.
+
+Sem uma chave configurada, o seletor de modelo exibe **＋ Adicionar chave de
+API** e a geração permanece desabilitada. Com uma chave, são listados apenas
+os modelos do respectivo provedor. Para remover uma chave, use o ícone de
+lixeira no próprio campo; a seleção de modelo é reajustada automaticamente.
+
+Variáveis de ambiente do servidor:
 
 ```bash
-GEMINI_API_KEY=...
-NVIDIA_API_KEY=...
-GROQ_API_KEY=...
+PORT=3001
+VITE_API_BASE_URL=
 ```
-
-- **Google Gemini**: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-- **NVIDIA NIM** (Nemotron 3 Ultra, DeepSeek V4 Pro, Kimi K3): [build.nvidia.com](https://build.nvidia.com)
-- **Groq** (GPT-OSS 120B, Qwen 3.8): [console.groq.com/keys](https://console.groq.com/keys)
-
-O **Painel de Configurações** da aplicação mostra quais provedores já estão
-configurados no servidor (via `GET /api/status`) e permite, opcionalmente,
-informar uma chave pessoal por navegador (fica só no `localStorage` do
-cliente e é enviada a cada requisição para `/api/gerar-modelo`, onde o
-backend a usa no lugar da sua própria — útil se várias pessoas usam a mesma
-instalação com chaves diferentes). Isso é só um *override*: sem preencher
-nada, a aplicação usa sempre as chaves do `.env` do servidor.
 
 ## Estrutura do projeto
 
 ```
 server/                    Backend Express (única parte que fala com as APIs de LLM)
-  index.ts                    Rotas /api/status e /api/gerar-modelo, serve dist/ em produção
+  index.ts                    Rotas /api/gerar-modelo, /api/modelos e /api/testar-modelo, serve dist/
+  listarModelos.ts            Lista os modelos de texto de cada provedor (paginação, filtros)
   llmService.ts                Orquestração (reaproveita promptBuilder/effortService de src/)
   providers/                   Chamada a cada provedor (Gemini/NVIDIA/Groq), sem CORS
 
 src/
   components/         Componentes Vue (editor, config, diagrama, legenda, histórico, validação)
-  data/               Base de conhecimento SSN (definições, schema, exemplos few-shot)
+  data/               Catálogo versionado de modelos e base de conhecimento SSN
   plugins/            Configuração do Vuetify (tema customizado)
   services/
     promptBuilder.ts       Construtores de prompt G1–G4 (usado pelo backend)
@@ -187,5 +219,4 @@ losango preto ancorado no canto do ator correspondente.
   separado para o servidor) — adequado para uso pessoal/local ou um único
   processo Node em produção; para um deploy mais robusto, considere
   compilar `server/` com `tsc` e rodar o `.js` resultante com `node`.
-#   E C O S - S S N - S t u d i o  
- 
+#

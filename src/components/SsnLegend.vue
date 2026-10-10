@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { DESCRICAO_TIPO_FLUXO, TIPOS_FLUXO } from "@/types/ssn";
+import { ESTILO_LEGENDA_FLUXO } from "@/services/graph/shapes";
 
 interface ItemLegenda {
   tipo: string;
@@ -40,7 +41,7 @@ const ITENS_ATOR: ItemLegenda[] = [
         <p class="text-caption text-medium-emphasis mb-2">Tipos de Fluxo</p>
         <div class="d-flex flex-column ga-1">
           <div v-for="tipo in TIPOS_FLUXO" :key="tipo" class="d-flex align-start ga-2">
-            <span class="forma-fluxo fonte-mono">{{ tipo }}</span>
+            <span class="forma-fluxo fonte-mono" :style="ESTILO_LEGENDA_FLUXO">{{ tipo }}</span>
             <span class="text-caption">{{ DESCRICAO_TIPO_FLUXO[tipo] }}</span>
           </div>
         </div>
@@ -77,20 +78,8 @@ const ITENS_ATOR: ItemLegenda[] = [
   clip-path: polygon(0 50%, 25% 0, 100% 0, 100% 100%, 25% 100%);
 }
 .forma-fluxo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
   position: relative;
   z-index: 1;
-  width: 48px;
-  min-height: 20px;
-  padding: 0 8px 0 4px;
-  background-color: #fff;
-  color: #1a1a1a;
-  border: 1px solid #1a1a1a;
-  clip-path: polygon(0 0, 75% 0, 100% 50%, 75% 100%, 0 100%);
-  flex-shrink: 0;
 }
 .forma-bifurcacao-direita {
   clip-path: polygon(0 0, 100% 0, 68% 50%, 100% 100%, 0 100%);

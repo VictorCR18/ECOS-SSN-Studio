@@ -7,9 +7,13 @@
 
 import OpenAI from "openai";
 import type { ParametrosEsforco } from "../../src/services/effortService";
-import type { ChamadaProvedorParams } from "./gemini";
+import { RespostaVaziaError, type ChamadaProvedorParams } from "./tipos";
 
 const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
+
+// A NIM aplica um teto de saída bem baixo quando `max_tokens` não é enviado, o que
+// corta o JSON SSN no meio (ou o gasta todo no raciocínio e devolve `content` nulo).
+const MAX_TOKENS_PADRAO = 16384;
 
 function camposExtrasDeEsforco(esforco: ParametrosEsforco): Record<string, unknown> {
   const extras: Record<string, unknown> = {};
@@ -24,9 +28,11 @@ export async function chamarNvidia({
   prompt,
   temperatura,
   esforco,
+  maxTokens,
+  semOpcionais,
 }: ChamadaProvedorParams): Promise<string> {
   if (!apiKey) {
-    throw new Error("Nenhuma chave de API da NVIDIA NIM configurada (NVIDIA_API_KEY no servidor).");
+    throw new Error("Nenhuma chave de API da NVIDIA NIM configurada. Adicione uma chave no Painel de Configurações.");
   }
 
   const client = new OpenAI({ apiKey, baseURL: NVIDIA_BASE_URL });
@@ -36,12 +42,13 @@ export async function chamarNvidia({
     messages: [{ role: "user", content: prompt }],
     temperature: temperatura,
     stream: false,
-    ...camposExtrasDeEsforco(esforco),
+    max_tokens: maxTokens ?? MAX_TOKENS_PADRAO,
+    ...(semOpcionais ? {} : camposExtrasDeEsforco(esforco)),
   } as Parameters<typeof client.chat.completions.create>[0]) as OpenAI.Chat.Completions.ChatCompletion;
 
   const texto = completion.choices[0]?.message?.content;
-  if (!texto) {
-    throw new Error("O modelo NVIDIA NIM retornou uma resposta vazia.");
+  if (!texto?.trim()) {
+    throw new RespostaVaziaError("O modelo NVIDIA NIM retornou uma resposta vazia.");
   }
   return texto;
 }

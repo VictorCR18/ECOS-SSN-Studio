@@ -7,9 +7,9 @@
 
 import Groq from "groq-sdk";
 import type { ParametrosEsforco } from "../../src/services/effortService";
-import type { ChamadaProvedorParams } from "./gemini";
+import { RespostaVaziaError, type ChamadaProvedorParams } from "./tipos";
 
-export class RespostaGroqIncompletaError extends Error {
+export class RespostaGroqIncompletaError extends RespostaVaziaError {
   constructor() {
     super("O modelo Groq não produziu conteúdo final. Uma nova tentativa será feita automaticamente.");
     this.name = "RespostaGroqIncompletaError";
@@ -20,10 +20,11 @@ function camposExtrasDeEsforco(esforco: ParametrosEsforco): Record<string, unkno
   return esforco.reasoningEffort ? { reasoning_effort: esforco.reasoningEffort } : {};
 }
 
-function limiteDeTokensDoModelo(modeloId: string): number | undefined {
-  // O tier atual da Groq limita o Qwen 3.8 a 1000 tokens de saída por minuto.
-  return modeloId === "qwen/qwen3.8-27b" ? 1000 : undefined;
-}
+// Tetos de saída por modelo, só para quem precisa deles. O tier atual da Groq limita o
+// Qwen 3.8 (preview) a 1000 tokens de saída por minuto.
+const TETO_DE_SAIDA_POR_MODELO: Record<string, number> = {
+  "qwen/qwen3.8-27b": 1000,
+};
 
 export async function chamarGroq({
   apiKey,
@@ -31,9 +32,11 @@ export async function chamarGroq({
   prompt,
   temperatura,
   esforco,
+  maxTokens,
+  semOpcionais,
 }: ChamadaProvedorParams): Promise<string> {
   if (!apiKey) {
-    throw new Error("Nenhuma chave de API da Groq configurada (GROQ_API_KEY no servidor).");
+    throw new Error("Nenhuma chave de API da Groq configurada. Adicione uma chave no Painel de Configurações.");
   }
 
   const client = new Groq({ apiKey });
@@ -43,10 +46,10 @@ export async function chamarGroq({
     messages: [{ role: "user", content: prompt }],
     temperature: temperatura,
     stream: false,
-    ...(limiteDeTokensDoModelo(modeloId)
-      ? { max_completion_tokens: limiteDeTokensDoModelo(modeloId) }
+    ...((maxTokens ?? TETO_DE_SAIDA_POR_MODELO[modeloId])
+      ? { max_completion_tokens: maxTokens ?? TETO_DE_SAIDA_POR_MODELO[modeloId] }
       : {}),
-    ...camposExtrasDeEsforco(esforco),
+    ...(semOpcionais ? {} : camposExtrasDeEsforco(esforco)),
   } as Parameters<typeof client.chat.completions.create>[0])) as Groq.Chat.ChatCompletion;
 
   const texto = completion.choices[0]?.message?.content;

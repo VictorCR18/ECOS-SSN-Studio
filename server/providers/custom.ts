@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ChamadaProvedorParams } from "./gemini";
+import type { ChamadaProvedorParams } from "./tipos";
 
 interface ChamadaLLMPersonalizadaParams extends ChamadaProvedorParams {
   endpoint: string;
