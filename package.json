@@ -5,7 +5,9 @@
   "description": "Modelagem de Ecossistemas de Software (ECOS) com geração automática de modelos SSN via LLM — evolução do ECOS Modeling.",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n VITE,API -c blue,green \"npm:dev:client\" \"npm:dev:server\"",
+    "dev": "concurrently -k -n FRONT,BACK -c cyan,green \"npm:dev:front\" \"npm:dev:back\"",
+    "dev:front": "vite",
+    "dev:back": "tsx watch server/index.ts",
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build": "vue-tsc -b --noEmit && tsc --noEmit -p tsconfig.server.json && vite build",

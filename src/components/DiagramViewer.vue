@@ -94,7 +94,14 @@ onBeforeUnmount(() => {
 });
 
 function renderizarModeloAtual() {
-  if (!graph || !ecos.modeloAtual) return;
+  if (!graph) return;
+  if (!ecos.modeloAtual) {
+    graph.getDataModel().clear();
+    resultadoRenderizacao = null;
+    tooltips.value = new Map();
+    menuFluxo.value = null;
+    return;
+  }
   resultadoRenderizacao = converterModeloParaGrafo(graph, ecos.modeloAtual);
   tooltips.value = resultadoRenderizacao.tooltips;
   configurarConexoes();

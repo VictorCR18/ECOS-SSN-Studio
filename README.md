@@ -119,8 +119,8 @@ tudo é "same-origin", então não há CORS a se preocupar mesmo em dev.
 Se preferir rodar cada processo separadamente (dois terminais):
 
 ```bash
-npm run dev:server   # API Express em http://localhost:3001
-npm run dev:client   # Vite em http://localhost:5173
+npm run dev:back    # API Express em http://localhost:3001 (ou npm run dev:server)
+npm run dev:front   # Vite em http://localhost:5173 (ou npm run dev:client)
 ```
 
 ### Build e execução em produção
