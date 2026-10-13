@@ -70,6 +70,21 @@ const NVIDIA = [
 const GEMINI = [{ id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" }, { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" }, { id: "gemma-3-27b-it" }];
 
 describe("lista de modelos (queixa: Gemini, nvidia/nemo… e google/gemma… não apareciam)", () => {
+  it("mostra os modelos do TCC e substitutos mesmo sem chave no painel", () => {
+    const s = useSettingsStore();
+    const chaves = chavesDisponiveis(s);
+    expect(chaves).toEqual(expect.arrayContaining([
+      "gemini:gemini-3.8-flash",
+      "nvidia:nvidia/nemotron-3-ultra-550b-a55b",
+      "nvidia:moonshotai/kimi-k3",
+      "groq:openai/gpt-oss-120b",
+      "nvidia:deepseek-ai/deepseek-v4.1-flash",
+      "groq:qwen/qwen3.8-27b",
+    ]));
+    expect(chaves).not.toContain("gemini:gemini-2.5-flash");
+    expect(chaves).not.toContain("gemini:gemini-2.5-pro");
+  });
+
   it("mostra a lista completa de cada provedor com chave", async () => {
     salvarConfig({ chaves: { gemini: "g", nvidia: "n", groq: "q" } });
     instalarApi({ listas: { gemini: GEMINI, nvidia: NVIDIA, groq: [{ id: "openai/gpt-oss-120b" }, { id: "qwen/qwen3.8-27b" }] } });
@@ -100,8 +115,9 @@ describe("lista de modelos (queixa: Gemini, nvidia/nemo… e google/gemma… nã
     expect(s.origemModelos.gemini?.erro).toContain("recusado");
     const chaves = chavesDisponiveis(s);
     expect(chaves).toContain("nvidia:moonshotai/kimi-k3");
-    expect(chaves).toContain("gemini:gemini-3.5-flash");
-    expect(chaves.some((c) => c.includes("deepseek-v4"))).toBe(false);
+    expect(chaves).toContain("gemini:gemini-3.8-flash");
+    expect(chaves).not.toContain("nvidia:deepseek-ai/deepseek-v4-pro");
+    expect(chaves).toContain("nvidia:deepseek-ai/deepseek-v4.1-flash");
   });
 
   it("lista vazia do provedor não deixa o usuário sem nenhum modelo", async () => {
@@ -186,14 +202,14 @@ describe("verificação de modelos", () => {
     expect(s.avisoModelo).toBeTruthy();
   });
 
-  it("verificação em segundo plano só testa destaques (catálogo + selecionado), não a lista inteira", async () => {
+  it("verificação em segundo plano testa só o modelo selecionado", async () => {
     salvarConfig({ chaves: { nvidia: "n" }, modoModeloAutomatico: false, modeloSelecionado: "nvidia:google/gemma-3-27b-it" });
     instalarApi({ listas: { nvidia: NVIDIA } });
     const s = useSettingsStore();
     await s.carregarModelosConfigurados();
     await esperar(50);
     const testados = sondas().map((c) => c.corpo.modeloId).sort();
-    expect(testados).toEqual(["google/gemma-3-27b-it", "moonshotai/kimi-k3", "nvidia/nemotron-3-ultra-550b-a55b"]);
+    expect(testados).toEqual(["google/gemma-3-27b-it"]);
   });
 
   it("resultado fica em cache: reabrir o app não repete as chamadas de teste", async () => {
@@ -211,7 +227,7 @@ describe("verificação de modelos", () => {
     await s.carregarModelosConfigurados();
     await esperar(50);
     expect(sondas().length).toBe(antes);
-    expect(s.estadoDoModelo("nvidia:moonshotai/kimi-k3")).toBe("ok");
+    expect(s.estadoDoModelo("nvidia:nvidia/nemotron-3-ultra-550b-a55b")).toBe("ok");
   });
 
   it("falha transitória da sonda ('desconhecido') NÃO esconde o modelo nem entra no cache", async () => {
@@ -230,7 +246,9 @@ describe("verificação de modelos", () => {
     const s = useSettingsStore();
     await s.carregarModelosConfigurados();
     await esperar(50);
-    expect(chavesDisponiveis(s).sort()).toEqual(["nvidia:moonshotai/kimi-k3", "nvidia:nvidia/nemotron-3-ultra-550b-a55b"]);
+    expect(chavesDisponiveis(s).filter((chave) => s.estadoDoModelo(chave) === "ok")).toEqual([
+      "nvidia:nvidia/nemotron-3-ultra-550b-a55b",
+    ]);
   });
 
   it("trocar a chave de um provedor invalida as verificações dele", async () => {
@@ -239,7 +257,7 @@ describe("verificação de modelos", () => {
     const s = useSettingsStore();
     await s.carregarModelosConfigurados();
     await esperar(50);
-    expect(s.estadoDoModelo("nvidia:moonshotai/kimi-k3")).toBe("ok");
+    expect(s.estadoDoModelo("nvidia:nvidia/nemotron-3-ultra-550b-a55b")).toBe("ok");
     s.definirChave("nvidia", "outra-chave");
     expect(s.estadoDoModelo("nvidia:moonshotai/kimi-k3")).toBeUndefined();
   });

@@ -15,6 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import cors from "cors";
+import "dotenv/config";
 import express, { type NextFunction, type Request, type Response } from "express";
 
 import { ErroLimiteUso, ErroModeloIndisponivelError, gerarModeloSSN, verificarModelo } from "./llmService";
@@ -32,14 +33,23 @@ const DIST_DIR = path.join(RAIZ_PROJETO, "dist");
 
 const PORT = Number(process.env.PORT ?? 3001);
 
+const CHAVES_AMBIENTE: ChavesApi = {
+  openai: process.env.OPENAI_API_KEY ?? "",
+  anthropic: process.env.ANTHROPIC_API_KEY ?? "",
+  gemini: process.env.GEMINI_API_KEY ?? "",
+  deepseek: process.env.DEEPSEEK_API_KEY ?? "",
+  nvidia: process.env.NVIDIA_API_KEY ?? "",
+  groq: process.env.GROQ_API_KEY ?? "",
+};
+
 function resolverChaves(chavesRecebidas: Partial<ChavesApi> | undefined): ChavesApi {
   return {
-    openai: chavesRecebidas?.openai?.trim() ?? "",
-    anthropic: chavesRecebidas?.anthropic?.trim() ?? "",
-    gemini: chavesRecebidas?.gemini?.trim() ?? "",
-    deepseek: chavesRecebidas?.deepseek?.trim() ?? "",
-    nvidia: chavesRecebidas?.nvidia?.trim() ?? "",
-    groq: chavesRecebidas?.groq?.trim() ?? "",
+    openai: chavesRecebidas?.openai?.trim() || CHAVES_AMBIENTE.openai,
+    anthropic: chavesRecebidas?.anthropic?.trim() || CHAVES_AMBIENTE.anthropic,
+    gemini: chavesRecebidas?.gemini?.trim() || CHAVES_AMBIENTE.gemini,
+    deepseek: chavesRecebidas?.deepseek?.trim() || CHAVES_AMBIENTE.deepseek,
+    nvidia: chavesRecebidas?.nvidia?.trim() || CHAVES_AMBIENTE.nvidia,
+    groq: chavesRecebidas?.groq?.trim() || CHAVES_AMBIENTE.groq,
   };
 }
 
@@ -54,12 +64,13 @@ interface CorpoListarModelos {
 
 app.post("/api/modelos", async (req: Request, res: Response) => {
   const corpo = req.body as CorpoListarModelos;
-  if (!corpo.provider || !corpo.apiKey?.trim()) {
+  const apiKey = corpo.provider ? resolverChaves({ [corpo.provider]: corpo.apiKey })[corpo.provider] : "";
+  if (!corpo.provider || !apiKey) {
     res.status(400).json({ erro: "Provedor e chave de API são obrigatórios." });
     return;
   }
   try {
-    res.json(await listarModelosDoProvedor(corpo.provider, corpo.apiKey.trim()));
+    res.json(await listarModelosDoProvedor(corpo.provider, apiKey));
   } catch (erro) {
     console.warn(`[modelos] Falha ao listar modelos de ${corpo.provider}:`, erro instanceof Error ? erro.message : erro);
     const status = erro instanceof ErroListagem ? erro.status : undefined;
@@ -81,11 +92,12 @@ interface CorpoTestarModelo {
 // Chamada mínima (1 requisição curta) para saber se o provedor ainda serve o modelo.
 app.post("/api/testar-modelo", async (req: Request, res: Response) => {
   const corpo = req.body as CorpoTestarModelo;
-  if (!corpo.provider || !corpo.modeloId?.trim() || !corpo.apiKey?.trim()) {
+  const apiKey = corpo.provider ? resolverChaves({ [corpo.provider]: corpo.apiKey })[corpo.provider] : "";
+  if (!corpo.provider || !corpo.modeloId?.trim() || !apiKey) {
     res.status(400).json({ erro: "Provedor, modelo e chave de API são obrigatórios." });
     return;
   }
-  res.json(await verificarModelo(corpo.provider, corpo.modeloId.trim(), corpo.apiKey.trim()));
+  res.json(await verificarModelo(corpo.provider, corpo.modeloId.trim(), apiKey));
 });
 
 interface CorpoGerarModelo {
@@ -113,7 +125,8 @@ app.post("/api/gerar-modelo", async (req: Request, res: Response) => {
     return;
   }
   const provedor = definicao?.provider ?? partesModelo!.provider;
-  if (!corpo.chaves?.[provedor]?.trim()) {
+  const chaves = resolverChaves(corpo.chaves);
+  if (!chaves[provedor]) {
     res.status(400).json({
       erro: `Nenhuma chave de API do provedor ${provedor} foi configurada. Adicione uma chave no Painel de Configurações.`,
     });
@@ -131,7 +144,7 @@ app.post("/api/gerar-modelo", async (req: Request, res: Response) => {
         temperatura: typeof corpo.temperatura === "number" ? corpo.temperatura : 0.3,
         configuracaoPersonalizada: corpo.configuracaoPersonalizada,
       },
-      resolverChaves(corpo.chaves),
+      chaves,
     );
 
     // A extração do JSON e a validação semântica/estrutural continuam no

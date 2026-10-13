@@ -2,9 +2,8 @@
 import { computed, onMounted, ref } from "vue";
 import { useEcosStore } from "@/stores/ecosStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { ESTRATEGIAS_PROMPT, ESFORCOS } from "@/types/ssn";
-import { sugerirEsforcoInicial } from "@/services/effortService";
-import { chaveDoModelo, rotuloDoProvedor } from "@/data/modelCatalog";
+import { ESTRATEGIAS_PROMPT } from "@/types/ssn";
+import { chaveDoModelo, MODELOS_SUBSTITUTOS, MODELOS_TCC, rotuloDoProvedor } from "@/data/modelCatalog";
 import { filtrarModelos, type ItemDeModelo } from "@/utils/modelFilter";
 
 const ecos = useEcosStore();
@@ -22,11 +21,6 @@ const estrategiaAtual = computed({
   set: (v) => settings.definirEstrategia(v),
 });
 
-const esforcoAtual = computed({
-  get: () => settings.esforcoSelecionado,
-  set: (v) => settings.definirEsforco(v),
-});
-
 const modeloAtual = computed({
   get: () => settings.modeloSelecionado,
   set: (v) => settings.definirModelo(v),
@@ -36,15 +30,8 @@ const descricaoEstrategia = computed(
   () => ESTRATEGIAS_PROMPT.find((e) => e.valor === estrategiaAtual.value)?.descricao ?? "",
 );
 
-const esforcoSugeridoInicial = computed(() =>
-  ecos.descricaoAtual.trim() ? sugerirEsforcoInicial(ecos.descricaoAtual) : null,
-);
-
 function aoAlterarDescricao(valor: string | null) {
   ecos.definirDescricao(valor ?? "");
-  if (settings.modoEsforcoAutomatico && esforcoSugeridoInicial.value) {
-    settings.definirEsforco(esforcoSugeridoInicial.value);
-  }
 }
 
 interface ItemSeletor extends ItemDeModelo {
@@ -52,6 +39,7 @@ interface ItemSeletor extends ItemDeModelo {
   disabled?: boolean;
   subtitle?: string;
   prependIcon?: string;
+  color?: string;
 }
 
 function segundosDeCooldown(chave: string): number {
@@ -59,9 +47,6 @@ function segundosDeCooldown(chave: string): number {
 }
 
 const modelosDisponiveis = computed<ItemSeletor[]>(() => {
-  if (!settings.algumaChaveConfigurada) {
-    return [{ value: "__adicionar-chave__", title: "＋ Adicionar chave de API" }];
-  }
   const itens: ItemSeletor[] = [];
   let provedorAnterior: string | undefined;
   for (const modelo of settings.availableModels) {
@@ -78,7 +63,11 @@ const modelosDisponiveis = computed<ItemSeletor[]>(() => {
     const chave = chaveDoModelo(modelo);
     const emCooldown = settings.cooldowns[chave] > Date.now();
     const estado = settings.estadoDoModelo(chave);
+    const descricaoSubstituto = MODELOS_SUBSTITUTOS[chave];
+    const destaque = MODELOS_TCC.has(chave) ? "TCC" : descricaoSubstituto ? "SUBSTITUTO" : "";
     const detalhes = [
+      destaque,
+      descricaoSubstituto,
       modelo.id !== modelo.label ? modelo.id : "",
       modelo.preview ? "preview" : "",
       estado === "ok" ? "" : settings.verificando[chave] ? "verificando…" : "não verificado",
@@ -87,9 +76,16 @@ const modelosDisponiveis = computed<ItemSeletor[]>(() => {
       value: chave,
       title: emCooldown
         ? `${modelo.label} — Limite atingido · volta em ${segundosDeCooldown(chave)}s`
-        : modelo.label,
+        : `${destaque ? `${destaque} · ` : ""}${modelo.label}`,
       subtitle: detalhes.join(" · ") || undefined,
-      prependIcon: estado === "ok" ? "mdi-check-circle-outline" : "mdi-help-circle-outline",
+      prependIcon: estado === "ok"
+        ? "mdi-check-circle-outline"
+        : destaque === "SUBSTITUTO"
+          ? "mdi-swap-horizontal-circle-outline"
+          : destaque === "TCC"
+            ? "mdi-star-circle-outline"
+            : "mdi-help-circle-outline",
+      color: destaque === "SUBSTITUTO" ? "warning" : destaque === "TCC" ? "primary" : undefined,
       disabled: emCooldown,
       provider: modelo.provider,
       id: modelo.id,
@@ -177,35 +173,6 @@ async function aoClicarGerar() {
 
       <div>
         <div class="d-flex align-center justify-space-between mb-1">
-          <span class="text-subtitle-2">Esforço de Geração</span>
-          <v-switch
-            :model-value="settings.modoEsforcoAutomatico"
-            label="Automático"
-            density="compact"
-            color="secondary"
-            hide-details
-            @update:model-value="settings.definirModoEsforcoAutomatico(Boolean($event))"
-          />
-        </div>
-        <v-btn-toggle
-          v-model="esforcoAtual"
-          mandatory
-          density="comfortable"
-          divided
-          :disabled="settings.modoEsforcoAutomatico"
-        >
-          <v-btn v-for="e in ESFORCOS" :key="e.valor" :value="e.valor" size="small">
-            {{ e.titulo }}
-          </v-btn>
-        </v-btn-toggle>
-        <p v-if="settings.modoEsforcoAutomatico" class="text-caption text-medium-emphasis mt-1 mb-0">
-          Ajustado automaticamente conforme o tamanho estimado do ECOS (≤10 atores: Baixo · 11–25: Médio ·
-          >25: Alto).
-        </p>
-      </div>
-
-      <div>
-        <div class="d-flex align-center justify-space-between mb-1">
           <span class="text-subtitle-2">Modelo (LLM)</span>
           <v-switch
             :model-value="settings.modoModeloAutomatico"
@@ -221,18 +188,18 @@ async function aoClicarGerar() {
           :items="modelosFiltrados"
           item-title="title"
           item-value="value"
-          :item-props="(item: ItemSeletor) => ({ subtitle: item.subtitle, prependIcon: item.prependIcon, disabled: item.disabled })"
+          :item-props="(item: ItemSeletor) => ({ subtitle: item.subtitle, prependIcon: item.prependIcon, color: item.color, disabled: item.disabled })"
           v-model:search="buscaModelo"
           no-filter
           :loading="carregandoLista"
-          :no-data-text="settings.algumaChaveConfigurada ? 'Nenhum modelo encontrado' : 'Adicione uma chave de API'"
-          :disabled="settings.modoModeloAutomatico && settings.algumaChaveConfigurada"
+          no-data-text="Nenhum modelo encontrado"
+          :disabled="settings.modoModeloAutomatico"
           density="comfortable"
           hide-details
           @update:model-value="atualizarModelo"
         />
         <p v-if="!settings.algumaChaveConfigurada" class="text-caption text-medium-emphasis mt-1 mb-0">
-          Nenhum modelo disponível. Adicione uma chave de API para gerar modelos.
+          Modelos do catálogo disponíveis. Configure uma chave no painel ou no arquivo .env para gerar modelos.
         </p>
         <v-alert
           v-for="lista in listasIncompletas"

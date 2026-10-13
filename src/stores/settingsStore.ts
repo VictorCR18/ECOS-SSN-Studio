@@ -6,6 +6,7 @@ import {
   chaveDoModelo,
   ehIdDeModeloUtilizavel,
   ehModeloDescontinuado,
+  ehModeloDoTccOuSubstituto,
   modelosDoCatalogo,
   separarChaveDoModelo,
   validarCatalogoDeModelos,
@@ -29,7 +30,6 @@ interface ConfigPersistida {
   chaves: ChavesApi;
   configuracaoPersonalizada: ConfiguracaoLLMPersonalizada;
   temperatura: number;
-  modoEsforcoAutomatico: boolean;
   modoModeloAutomatico: boolean;
   modelosPersonalizados: Partial<Record<ProvedorLLM, string[]>>;
   trocarModeloAutomaticamente: boolean;
@@ -50,7 +50,6 @@ const CONFIG_PADRAO: ConfigPersistida = {
   },
   configuracaoPersonalizada: { nome: "LLM personalizada", endpoint: "", modelo: "" },
   temperatura: 0.3,
-  modoEsforcoAutomatico: true,
   modoModeloAutomatico: true,
   modelosPersonalizados: {},
   trocarModeloAutomaticamente: false,
@@ -60,7 +59,6 @@ const CONFIG_PADRAO: ConfigPersistida = {
 
 interface EstadoSettings extends ConfigPersistida {
   estrategiaSelecionada: EstrategiaPrompt;
-  esforcoSelecionado: EsforcoGeracao;
   modeloSelecionado: string;
   modelosDinamicos: Partial<Record<ProvedorLLM, ConfiguracaoModelo[]>>;
   cooldowns: Record<string, number>;
@@ -166,7 +164,6 @@ export const useSettingsStore = defineStore("settings", {
       },
       modelosPersonalizados: persistido.modelosPersonalizados ?? {},
       estrategiaSelecionada: "G3",
-      esforcoSelecionado: "medio",
       modeloSelecionado: modelosSelecionados,
       // Sem lista dinâmica ainda: o getter usa o catálogo até a consulta ao provedor terminar.
       // (Antes isto começava como `[]`, o que zerava a seleção salva a cada recarga.)
@@ -188,8 +185,10 @@ export const useSettingsStore = defineStore("settings", {
       Object.values(estado.chaves).some((chave) => Boolean(chave.trim())),
     availableModels: (estado): ConfiguracaoModelo[] =>
       (Object.keys(estado.chaves) as ProvedorLLM[]).flatMap((provider) => {
-        if (!estado.chaves[provider].trim()) return [];
-        return modelosBrutosDoProvedor(estado, provider).filter((modelo) => {
+        const modelos = estado.chaves[provider].trim()
+          ? modelosBrutosDoProvedor(estado, provider)
+          : modelosDoCatalogo(provider).filter((modelo) => ehModeloDoTccOuSubstituto(provider, modelo.id));
+        return modelos.filter((modelo) => {
           if (ehModeloDescontinuado(provider, modelo.id)) return false;
           const registro = registroDe(estado, modelo);
           if (registro?.estado === "indisponivel") return false;
@@ -223,7 +222,6 @@ export const useSettingsStore = defineStore("settings", {
         chaves,
         configuracaoPersonalizada,
         temperatura,
-        modoEsforcoAutomatico,
         modoModeloAutomatico,
         modelosPersonalizados,
         trocarModeloAutomaticamente,
@@ -235,7 +233,6 @@ export const useSettingsStore = defineStore("settings", {
         chaves,
         configuracaoPersonalizada,
         temperatura,
-        modoEsforcoAutomatico,
         modoModeloAutomatico,
         modelosPersonalizados,
         trocarModeloAutomaticamente,
@@ -342,26 +339,21 @@ export const useSettingsStore = defineStore("settings", {
       this.garantirModeloDisponivel();
     },
 
-    /**
-     * Verifica em segundo plano o que o usuário mais provavelmente vai usar: os modelos do
-     * catálogo, os digitados por ele e o selecionado. Respeita a validade do cache, então
-     * em geral custa poucas chamadas por dia.
-     */
+    /** Verifica em segundo plano somente o modelo selecionado para preservar a cota da API. */
     async verificarDestaques(somenteProvedor?: ProvedorLLM) {
       const provedores = (Object.keys(this.chaves) as ProvedorLLM[]).filter(
         (p) => this.chaves[p].trim() && (!somenteProvedor || p === somenteProvedor),
       );
-      const candidatos = provedores.flatMap((provider) =>
-        modelosBrutosDoProvedor(this, provider)
-          .filter((m) => !ehModeloDescontinuado(provider, m.id))
-          .filter(
-            (m) =>
-              m.custom ||
-              CATALOGO_MODELOS.some((c) => c.provider === provider && c.id === m.id) ||
-              chaveDoModelo(m) === this.modeloSelecionado,
-          )
-          .map(chaveDoModelo),
-      );
+      const selecionado = separarChaveDoModelo(this.modeloSelecionado);
+      const candidatoInicial = provedores
+        .flatMap((provider) => modelosBrutosDoProvedor(this, provider)
+          .filter((modelo) => !ehModeloDescontinuado(provider, modelo.id))
+          .map(chaveDoModelo))[0];
+      const candidatos = selecionado && provedores.includes(selecionado.provider)
+        ? [this.modeloSelecionado]
+        : candidatoInicial
+          ? [candidatoInicial]
+          : [];
       await executarComLimite(
         candidatos.filter((chave) => !registroValido(this.verificacoes[chave])),
         CONCORRENCIA_VERIFICACAO,
@@ -458,15 +450,6 @@ export const useSettingsStore = defineStore("settings", {
       this.modoModeloAutomatico = ativo;
       this.persistir();
       if (ativo) this.garantirModeloDisponivel();
-    },
-
-    definirEsforco(esforco: EsforcoGeracao) {
-      this.esforcoSelecionado = esforco;
-    },
-
-    definirModoEsforcoAutomatico(ativo: boolean) {
-      this.modoEsforcoAutomatico = ativo;
-      this.persistir();
     },
 
     definirTrocaAutomatica(ativo: boolean) {

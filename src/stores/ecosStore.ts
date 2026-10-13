@@ -11,7 +11,6 @@ import { extrairJSON, ErroExtracaoJSON } from "@/utils/jsonExtractor";
 import { validarModeloSSN } from "@/utils/ssnValidator";
 import { armazenamentoModelos } from "@/utils/storage";
 import { gerarId } from "@/utils/id";
-import { sugerirEsforcoPorQuantidadeAtores } from "@/services/effortService";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { LLMServiceError } from "@/types/llm";
 import { definicaoDoModelo } from "@/types/llm";
@@ -90,7 +89,7 @@ export const useEcosStore = defineStore("ecos", {
             ecos: this.nomeEcosAtual || "Ecossistema sem nome",
             descricao: this.descricaoAtual,
             estrategia: settings.estrategiaSelecionada,
-            esforco: settings.esforcoSelecionado,
+            esforco: "baixo",
             modeloId: modeloSolicitado,
             temperatura: settings.temperatura,
             configuracaoPersonalizada: settings.configuracaoPersonalizada,
@@ -121,7 +120,7 @@ export const useEcosStore = defineStore("ecos", {
         this.idModeloCarregado = null;
         this.metadadosAtuais = {
           estrategia: settings.estrategiaSelecionada,
-          esforco: settings.esforcoSelecionado,
+          esforco: "baixo",
           provedor: settings.availableModels.find((modelo) => chaveDoModelo(modelo) === modeloSolicitado)?.provider
             ?? definicaoDoModelo(modeloSolicitado)?.provider
             ?? "gemini",
@@ -133,10 +132,6 @@ export const useEcosStore = defineStore("ecos", {
 
         if (resposta.aviso) this.aviso = resposta.aviso;
 
-        // Reajusta o esforço com base no tamanho real do modelo gerado.
-        if (settings.modoEsforcoAutomatico) {
-          settings.definirEsforco(sugerirEsforcoPorQuantidadeAtores(modelo.atores.length));
-        }
       } catch (erro) {
         if (controlador.signal.aborted || (erro instanceof DOMException && erro.name === "AbortError")) {
           return;

@@ -18,7 +18,8 @@ seleção de LLM/esforço documentados em `executor_experimento.ts`.
   baseline, contexto estruturado, persona + few-shot e cadeia de raciocínio
   (Chain-of-Thought).
 - **Seleção automática de LLM por estratégia**, conforme a conclusão do TCC
-  (Qwen 3.8 para G4, com o GPT-OSS 120B como plano B porque o 3.8 está em *preview* na Groq e o Qwen 3.6 foi desligado em 14/09/26; Nemotron 3 Ultra para G2/G3), sempre sobrescrevível
+  (**Qwen 3.8 27B**, substituto do **Qwen 3.6** desligado, para G4; **GPT-OSS
+  120B** como plano B; **Nemotron 3 Ultra** para G2/G3), sempre sobrescrevível
   manualmente.
 - **Catálogo dinâmico por provedor**: além dos modelos versionados no catálogo,
   o painel consulta os modelos disponíveis para cada chave e permite cadastrar
@@ -49,13 +50,25 @@ seleção de LLM/esforço documentados em `executor_experimento.ts`.
 
 ## Quais modelos aparecem (e por que alguns somem)
 
+### Modelos usados no TCC
+
+| Modelo do TCC | Provedor/chave no `.env` | Situação atual |
+| --- | --- | --- |
+| **Gemini 3.8 Flash** | `GEMINI_API_KEY` | **Substituto do Gemini 3.5 Flash** |
+| **DeepSeek V4 Pro** | `NVIDIA_API_KEY` | **Substituído por DeepSeek V4.1 Flash**, pois foi descontinuado |
+| **Nemotron 3 Ultra** | `NVIDIA_API_KEY` | Modelo usado no teste |
+| **GPT-OSS 120B** | `GROQ_API_KEY` | Modelo usado no teste |
+| **Kimi K3** | `NVIDIA_API_KEY` | Modelo usado no teste |
+| **Qwen 3.6** | `GROQ_API_KEY` | **Substituído por Qwen 3.8 27B**, pois foi desligado |
+
+Os substitutos aparecem com destaque no catálogo e podem ser selecionados manualmente.
+
 A lista de cada provedor vem da API dele (`/api/modelos`), mas **estar listado não
 significa estar funcionando**: a NVIDIA, por exemplo, continua listando modelos já
 aposentados (como o DeepSeek V4 Pro), que respondem `HTTP 410 – end of life`. Por isso
 o app confirma com uma chamada mínima (`/api/testar-modelo`, ~1 requisição curta):
 
-- Os modelos do catálogo, os que você cadastrou e o selecionado são verificados em
-  segundo plano. Quem responde ganha o ícone ✓; quem o provedor não serve mais
+- O modelo selecionado é verificado em segundo plano. Quem responde ganha o ícone ✓; quem o provedor não serve mais
   (404/410/"end of life"/sem acesso) **some da lista** e aparece como chip no Painel de
   Configurações. Falhas transitórias (timeout, 5xx, chave inválida) **não** escondem o modelo.
 - Ao escolher no seletor um modelo ainda não verificado, ele é testado na hora.
@@ -141,7 +154,8 @@ As chaves são configuradas pelo próprio usuário no painel lateral
 campos para OpenAI, Anthropic (Claude), Google Gemini, DeepSeek, NVIDIA NIM e
 Groq, com links para criar cada chave. O valor salvo fica apenas no
 `localStorage` daquele navegador; o backend recebe a chave somente durante a
-requisição de geração, não a persiste nem a usa como fallback de ambiente.
+requisição de geração. Como alternativa para o teste do TCC, o backend usa as
+chaves do `.env` quando o painel não envia uma chave.
 
 Sem uma chave configurada, o seletor de modelo exibe **＋ Adicionar chave de
 API** e a geração permanece desabilitada. Com uma chave, são listados apenas
@@ -153,7 +167,12 @@ Variáveis de ambiente do servidor:
 ```bash
 PORT=3001
 VITE_API_BASE_URL=
+GEMINI_API_KEY=
+NVIDIA_API_KEY=
+GROQ_API_KEY=
 ```
+
+O arquivo `.env` local não deve ser versionado. Use `.env.example` como referência.
 
 ## Estrutura do projeto
 

@@ -15,6 +15,23 @@ export interface ConfiguracaoModelo {
   preview?: boolean;
 }
 
+export const MODELOS_TCC = new Set([
+  "nvidia:nvidia/nemotron-3-ultra-550b-a55b",
+  "nvidia:moonshotai/kimi-k3",
+  "groq:openai/gpt-oss-120b",
+]);
+
+export const MODELOS_SUBSTITUTOS: Record<string, string> = {
+  "gemini:gemini-3.8-flash": "substitui o Gemini 3.5 Flash",
+  "nvidia:deepseek-ai/deepseek-v4.1-flash": "substitui o DeepSeek V4 Pro",
+  "groq:qwen/qwen3.8-27b": "substitui o Qwen 3.6",
+};
+
+export function ehModeloDoTccOuSubstituto(provider: ProvedorLLM, id: string): boolean {
+  const chave = `${provider}:${id}`;
+  return MODELOS_TCC.has(chave) || chave in MODELOS_SUBSTITUTOS;
+}
+
 const ID_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function ehIdDeModeloUtilizavel(id: string): boolean {
@@ -100,11 +117,12 @@ export const CATALOGO_MODELOS: ConfiguracaoModelo[] = [
   { id: "gpt-5-mini", label: "GPT-5 Mini", provider: ProviderId.OPENAI, family: "GPT", capabilities: { supportsReasoning: true } },
   { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5", provider: ProviderId.ANTHROPIC, family: "Claude", capabilities: { supportsReasoning: true } },
   { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", provider: ProviderId.ANTHROPIC, family: "Claude", capabilities: { supportsReasoning: true } },
-  { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash", provider: ProviderId.GEMINI, family: "Gemini", capabilities: { supportsReasoning: true } },
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", provider: ProviderId.GEMINI, family: "Gemini", capabilities: { supportsReasoning: true } },
   { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", provider: ProviderId.GEMINI, family: "Gemini", capabilities: { supportsReasoning: true } },
   { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", provider: ProviderId.GEMINI, family: "Gemini", capabilities: { supportsReasoning: true } },
   { id: "deepseek-chat", label: "DeepSeek Chat", provider: ProviderId.DEEPSEEK, family: "DeepSeek", capabilities: { supportsReasoning: false } },
   { id: "deepseek-reasoner", label: "DeepSeek Reasoner", provider: ProviderId.DEEPSEEK, family: "DeepSeek", capabilities: { supportsReasoning: true } },
+  { id: "deepseek-ai/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash (substituto do V4 Pro)", provider: ProviderId.NVIDIA, family: "DeepSeek", capabilities: { supportsReasoning: true } },
   { id: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", provider: ProviderId.NVIDIA, family: "Nemotron", capabilities: { supportsReasoning: true } },
   { id: "moonshotai/kimi-k3", label: "Kimi K3", provider: ProviderId.NVIDIA, family: "Kimi", capabilities: { supportsReasoning: true } },
   { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B", provider: ProviderId.GROQ, family: "GPT-OSS", capabilities: { supportsReasoning: true } },
